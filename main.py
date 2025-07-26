@@ -11,7 +11,7 @@ import telebot
 # === BOT & WALLET CONFIG ===
 BOT_TOKEN = os.getenv("BOT_TOKEN", "7705638552:AAHN7YJ-8fB6l_CMp_L9tbZDfNMdpQj2Fc4")
 ADMIN_USERNAMES = ["Indianarmy_1947", "Threethirty330","@ASTARR000"]
-GROUP_ID = -4952936707
+GROUP_ID = -1002572686648
 
 ESCROW_WALLET = "0x5a2dD9bFe9cB39F6A1AD806747ce29718b1BfB70"
 PRIVATE_KEY = os.getenv("PRIVATE_KEY", "26ff32efb7b61a3602cc693b77f824427353f20dccbd4497f25322e3c53fdd4b")
@@ -113,8 +113,20 @@ if not os.path.exists(ORDERS_FILE):
         json.dump({"buy_orders": {}, "sell_orders": {}}, f)
 
 def load_orders():
-    with open(ORDERS_FILE, "r") as f:
-        return json.load(f)
+    try:
+        with open(ORDERS_FILE, "r") as f:
+            data = json.load(f)
+            # Ensure proper structure
+            if "buy_orders" not in data:
+                data["buy_orders"] = {}
+            if "sell_orders" not in data:
+                data["sell_orders"] = {}
+            return data
+    except (FileNotFoundError, json.JSONDecodeError):
+        # Create new file with proper structure
+        default_data = {"buy_orders": {}, "sell_orders": {}}
+        save_orders(default_data)
+        return default_data
 
 def save_orders(data):
     with open(ORDERS_FILE, "w") as f:
