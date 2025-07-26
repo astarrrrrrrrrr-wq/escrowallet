@@ -11,7 +11,7 @@ import telebot
 # === BOT & WALLET CONFIG ===
 BOT_TOKEN = os.getenv("BOT_TOKEN", "7705638552:AAHN7YJ-8fB6l_CMp_L9tbZDfNMdpQj2Fc4")
 ADMIN_USERNAMES = ["Indianarmy_1947", "Threethirty330","@ASTARR000"]
-GROUP_ID = -1002830799357
+GROUP_ID = -4952936707
 
 ESCROW_WALLET = "0x5a2dD9bFe9cB39F6A1AD806747ce29718b1BfB70"
 PRIVATE_KEY = os.getenv("PRIVATE_KEY", "26ff32efb7b61a3602cc693b77f824427353f20dccbd4497f25322e3c53fdd4b")
@@ -221,7 +221,17 @@ def set_wallet(message):
 
 @bot.message_handler(commands=['buy'])
 def buy_order(message):
+    print(f"🔍 Buy command received from chat_id: {message.chat.id}, expected: {GROUP_ID}")
+    print(f"📱 User: {message.from_user.username}, Message: {message.text}")
+    
     if message.chat.id != GROUP_ID:
+        bot.reply_to(message, 
+            f"❌ <b>Wrong Chat</b>\n\n"
+            f"This bot only works in the authorized trading group.\n"
+            f"Current chat ID: <code>{message.chat.id}</code>\n"
+            f"Required chat ID: <code>{GROUP_ID}</code>", 
+            parse_mode='HTML'
+        )
         return
     
     username = message.from_user.username
@@ -334,7 +344,17 @@ def buy_order(message):
 
 @bot.message_handler(commands=['sell'])
 def sell_order(message):
+    print(f"🔍 Sell command received from chat_id: {message.chat.id}, expected: {GROUP_ID}")
+    print(f"📱 User: {message.from_user.username}, Message: {message.text}")
+    
     if message.chat.id != GROUP_ID:
+        bot.reply_to(message, 
+            f"❌ <b>Wrong Chat</b>\n\n"
+            f"This bot only works in the authorized trading group.\n"
+            f"Current chat ID: <code>{message.chat.id}</code>\n"
+            f"Required chat ID: <code>{GROUP_ID}</code>", 
+            parse_mode='HTML'
+        )
         return
     
     username = message.from_user.username
