@@ -22,7 +22,7 @@ USDT_CONTRACT = "0xc2132d05d31c914a87c6611c10748aeb04b58e8f"
 USDT_DECIMALS = 6
 
 # === WEB3 SETUP ===
-from web3.middleware import geth_poa_middleware
+from web3.middleware.geth_poa import geth_poa_middleware
 web3 = Web3(Web3.HTTPProvider(RPC_URL))
 web3.middleware_onion.inject(geth_poa_middleware, layer=0)
 
@@ -311,6 +311,47 @@ app = Flask(__name__)
 @app.route('/')
 def home():
     return "✅ Escrow bot running."
+
+@app.route('/health')
+def health_check():
+    try:
+        # Check Web3 connection
+        is_connected = web3.is_connected()
+        
+        # Check USDT balance (verifies blockchain connectivity)
+        balance = get_usdt_balance()
+        
+        # Check if database files exist
+        import os
+        db_exists = os.path.exists('escrows.json')
+        blacklist_exists = os.path.exists('blacklist.json')
+        
+        if is_connected and balance is not None:
+            return {
+                "status": "healthy",
+                "web3_connected": is_connected,
+                "usdt_balance": balance,
+                "database_files": {
+                    "escrows": db_exists,
+                    "blacklist": blacklist_exists
+                },
+                "timestamp": time.time()
+            }, 200
+        else:
+            return {
+                "status": "unhealthy",
+                "web3_connected": is_connected,
+                "error": "Connection or balance check failed"
+            }, 503
+    except Exception as e:
+        return {
+            "status": "error",
+            "error": str(e)
+        }, 500
+
+@app.route('/status')
+def simple_status():
+    return "OK", 200
 
 def run_flask():
     app.run(host='0.0.0.0', port=5000, debug=False)

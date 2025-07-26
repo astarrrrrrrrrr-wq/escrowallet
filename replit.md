@@ -42,7 +42,18 @@ Preferred communication style: Simple, everyday language.
 
 ### 4. Web Server Component
 - Flask server for health checks and uptime monitoring
-- Simple endpoint for external monitoring services
+- Multiple monitoring endpoints for external services:
+  - `/` - Basic "Escrow bot running" message  
+  - `/health` - Comprehensive health check (Web3, balance, files)
+  - `/status` - Simple "OK" response for UptimeRobot
+
+## Recent Changes
+
+### July 26, 2025 - Monitoring Endpoints Added
+- Added comprehensive `/health` endpoint for detailed system status monitoring
+- Added simple `/status` endpoint returning "OK" for basic uptime checks
+- Fixed Web3 middleware import for compatibility
+- Both endpoints now ready for UptimeRobot monitoring
 
 ## Data Flow
 
