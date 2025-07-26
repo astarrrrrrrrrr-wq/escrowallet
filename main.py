@@ -332,13 +332,29 @@ def buy_order(message):
     save_orders(orders)
     
     bot.reply_to(message, 
-        f"🛒 <b>Buy Order Created!</b>\n\n"
-        f"💼 Buyer: @{username}\n"
-        f"💵 Amount: {amount} USDT\n"
-        f"🏦 Your Wallet: <code>{wallets[f'@{username}']}</code>\n"
-        f"🆔 Order ID: <code>{order_id}</code>\n\n"
-        f"⏳ Waiting for a seller to match your order...\n"
-        f"📝 View all orders: /orders", 
+        f"🛒 <b>Buy Order Recorded Successfully!</b>\n\n"
+        f"✅ <b>Status:</b> Waiting for seller to match\n"
+        f"💼 <b>Buyer:</b> @{username}\n"
+        f"💵 <b>Amount:</b> {amount} USDT\n"
+        f"🏦 <b>Your Wallet:</b> <code>{wallets[f'@{username}']}</code>\n"
+        f"🆔 <b>Order ID:</b> <code>{order_id}</code>\n\n"
+        f"⏳ <b>Next Steps:</b>\n"
+        f"• Waiting for a seller with {amount} USDT\n"
+        f"• You'll be notified when matched\n"
+        f"• Check active orders: /orders\n\n"
+        f"🔔 Your order is now live in the marketplace!", 
+        parse_mode='HTML'
+    )
+    
+    # Notify group about new buy order
+    bot.send_message(
+        chat_id=GROUP_ID,
+        text=f"🛒 <b>NEW BUY ORDER POSTED</b>\n\n"
+             f"💼 Buyer: @{username} wants to buy\n"
+             f"💵 Amount: {amount} USDT\n"
+             f"🆔 Order ID: <code>{order_id}</code>\n\n"
+             f"🏷️ Sellers: Use <code>/sell {amount}</code> to match!\n"
+             f"📊 View all orders: /orders",
         parse_mode='HTML'
     )
 
@@ -444,12 +460,28 @@ def sell_order(message):
     save_orders(orders)
     
     bot.reply_to(message, 
-        f"💰 <b>Sell Order Created!</b>\n\n"
-        f"🛒 Seller: @{username}\n"
-        f"💵 Amount: {amount} USDT\n"
-        f"🆔 Order ID: <code>{order_id}</code>\n\n"
-        f"⏳ Waiting for a buyer to match your order...\n"
-        f"📝 View all orders: /orders", 
+        f"💰 <b>Sell Order Recorded Successfully!</b>\n\n"
+        f"✅ <b>Status:</b> Waiting for buyer to match\n"
+        f"🛒 <b>Seller:</b> @{username}\n"
+        f"💵 <b>Amount:</b> {amount} USDT\n"
+        f"🆔 <b>Order ID:</b> <code>{order_id}</code>\n\n"
+        f"⏳ <b>Next Steps:</b>\n"
+        f"• Waiting for a buyer wanting {amount} USDT\n"
+        f"• You'll be notified when matched\n"
+        f"• Check active orders: /orders\n\n"
+        f"🔔 Your order is now live in the marketplace!", 
+        parse_mode='HTML'
+    )
+    
+    # Notify group about new sell order
+    bot.send_message(
+        chat_id=GROUP_ID,
+        text=f"💰 <b>NEW SELL ORDER POSTED</b>\n\n"
+             f"🛒 Seller: @{username} wants to sell\n"
+             f"💵 Amount: {amount} USDT\n"
+             f"🆔 Order ID: <code>{order_id}</code>\n\n"
+             f"🏷️ Buyers: Use <code>/buy {amount}</code> to match!\n"
+             f"📊 View all orders: /orders",
         parse_mode='HTML'
     )
 
