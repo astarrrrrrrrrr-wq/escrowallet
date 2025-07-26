@@ -49,11 +49,17 @@ Preferred communication style: Simple, everyday language.
 
 ## Recent Changes
 
-### July 26, 2025 - Monitoring Endpoints Added
+### July 26, 2025 - Enhanced Bot Commands & Monitoring
 - Added comprehensive `/health` endpoint for detailed system status monitoring
 - Added simple `/status` endpoint returning "OK" for basic uptime checks
 - Fixed Web3 middleware import for compatibility
-- Both endpoints now ready for UptimeRobot monitoring
+- Enhanced all bot commands with professional emojis and HTML formatting
+- Added new user commands: `/help`, `/info`, `/balance`, `/status`, `/list`, `/stats`
+- Added new admin commands: `/deals`, `/emergency`, `/blacklist`
+- Improved error handling and user feedback across all commands
+- Added catch-all handler for unknown commands with helpful guidance
+- Enhanced security messages and professional presentation
+- Ready for 24/7 UptimeRobot monitoring
 
 ## Data Flow
 

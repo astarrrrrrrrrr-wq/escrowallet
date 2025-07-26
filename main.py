@@ -126,7 +126,151 @@ def get_usdt_balance():
 # === BOT COMMAND HANDLERS ===
 @bot.message_handler(commands=['start'])
 def start(message):
-    bot.reply_to(message, "🤖 Escrow bot is online and ready!")
+    welcome_msg = (
+        "🤖 <b>Welcome to Secure Escrow Bot!</b>\n\n"
+        "🛡️ Your trusted intermediary for safe crypto transactions\n\n"
+        "📋 <b>Available Commands:</b>\n"
+        "🤝 /deal - Start a new escrow deal\n"
+        "✅ /confirm - Confirm deal completion\n"
+        "💰 /balance - Check escrow wallet balance\n"
+        "📊 /status - View deal status\n"
+        "📝 /list - List all active deals\n"
+        "💡 /help - Show detailed help\n"
+        "ℹ️ /info - Bot and wallet information\n\n"
+        "🔒 <b>Admin Commands:</b>\n"
+        "🚫 /scammer - Report scammer\n"
+        "🗂️ /deals - View all deals\n"
+        "🚨 /emergency - Emergency refund\n\n"
+        "💬 For support, contact our admins!"
+    )
+    bot.reply_to(message, welcome_msg, parse_mode='HTML')
+
+@bot.message_handler(commands=['help'])
+def help_command(message):
+    help_msg = (
+        "📖 <b>Detailed Help Guide</b>\n\n"
+        "🤝 <b>/deal @buyer @seller WALLET_ADDRESS AMOUNT</b>\n"
+        "   Start a new escrow transaction\n"
+        "   Example: <code>/deal @john @mike 0x123...abc 100</code>\n\n"
+        "✅ <b>/confirm TX_ID</b>\n"
+        "   Buyer confirms product/service received\n"
+        "   Example: <code>/confirm 1234567890</code>\n\n"
+        "💰 <b>/balance</b>\n"
+        "   Check current escrow wallet balance\n\n"
+        "📊 <b>/status TX_ID</b>\n"
+        "   Check status of specific transaction\n\n"
+        "📝 <b>/list</b>\n"
+        "   Show your active transactions\n\n"
+        "ℹ️ <b>/info</b>\n"
+        "   Display bot and wallet information\n\n"
+        "🛡️ <b>Security:</b> All funds are held securely until both parties confirm completion!"
+    )
+    bot.reply_to(message, help_msg, parse_mode='HTML')
+
+@bot.message_handler(commands=['info'])
+def info_command(message):
+    balance = get_usdt_balance()
+    info_msg = (
+        "ℹ️ <b>Escrow Bot Information</b>\n\n"
+        "🏦 <b>Escrow Wallet:</b>\n<code>{}</code>\n\n"
+        "💰 <b>Current Balance:</b> {} USDT\n"
+        "🌐 <b>Network:</b> Polygon (MATIC)\n"
+        "🪙 <b>Token:</b> USDT (6 decimals)\n"
+        "🔒 <b>Security:</b> Multi-admin controlled\n"
+        "⚡ <b>Status:</b> Online & Monitoring\n\n"
+        "📞 <b>Need Help?</b> Contact our admins for support!"
+    ).format(ESCROW_WALLET, balance)
+    bot.reply_to(message, info_msg, parse_mode='HTML')
+
+@bot.message_handler(commands=['balance'])
+def balance_command(message):
+    balance = get_usdt_balance()
+    balance_msg = (
+        "💰 <b>Escrow Wallet Balance</b>\n\n"
+        "🏦 <b>Address:</b>\n<code>{}</code>\n\n"
+        "💵 <b>Current Balance:</b> {} USDT\n"
+        "🌐 <b>Network:</b> Polygon\n"
+        "⏰ <b>Last Updated:</b> Just now\n\n"
+        "✅ All funds are secure and monitored 24/7!"
+    ).format(ESCROW_WALLET, balance)
+    bot.reply_to(message, balance_msg, parse_mode='HTML')
+
+@bot.message_handler(commands=['status'])
+def status_command(message):
+    args = message.text.split()[1:]
+    if len(args) != 1:
+        bot.reply_to(message, "❗ Usage: /status TX_ID\nExample: <code>/status 1234567890</code>", parse_mode='HTML')
+        return
+    
+    tx_id = args[0]
+    db = load_db()
+    tx = db.get(tx_id)
+    
+    if not tx:
+        bot.reply_to(message, "❌ <b>Transaction not found!</b>\n\nPlease check the TX_ID and try again.", parse_mode='HTML')
+        return
+    
+    status_emoji = {
+        "waiting_payment": "⏳",
+        "paid": "💰", 
+        "completed": "✅",
+        "refunded": "🔄"
+    }
+    
+    status_msg = (
+        "📊 <b>Transaction Status</b>\n\n"
+        "🆔 <b>TX ID:</b> <code>{}</code>\n"
+        "💼 <b>Buyer:</b> {}\n"
+        "🛒 <b>Seller:</b> {}\n"
+        "💵 <b>Amount:</b> {} USDT\n"
+        "📍 <b>Status:</b> {} {}\n"
+        "🏦 <b>Seller Wallet:</b>\n<code>{}</code>\n\n"
+        "⏰ <b>Created:</b> {}"
+    ).format(
+        tx_id, tx['buyer'], tx['seller'], tx['amount'],
+        status_emoji.get(tx['status'], '❓'), tx['status'].replace('_', ' ').title(),
+        tx['seller_wallet'], 
+        time.strftime('%Y-%m-%d %H:%M UTC', time.gmtime(int(tx_id)))
+    )
+    bot.reply_to(message, status_msg, parse_mode='HTML')
+
+@bot.message_handler(commands=['list'])
+def list_command(message):
+    username = message.from_user.username
+    if not username:
+        bot.reply_to(message, "❌ Please set a Telegram username to use this feature.")
+        return
+    
+    db = load_db()
+    user_deals = []
+    
+    for tx_id, tx in db.items():
+        if f"@{username}" in [tx['buyer'], tx['seller']]:
+            user_deals.append((tx_id, tx))
+    
+    if not user_deals:
+        bot.reply_to(message, 
+            "📝 <b>No Active Deals</b>\n\n"
+            "You don't have any current escrow transactions.\n"
+            "Use /deal to start a new escrow!", 
+            parse_mode='HTML'
+        )
+        return
+    
+    list_msg = "📝 <b>Your Active Deals</b>\n\n"
+    for tx_id, tx in user_deals[-5:]:  # Show last 5 deals
+        status_emoji = {"waiting_payment": "⏳", "paid": "💰", "completed": "✅", "refunded": "🔄"}
+        role = "💼 Buyer" if f"@{username}" == tx['buyer'] else "🛒 Seller"
+        
+        list_msg += (
+            f"🆔 <code>{tx_id}</code>\n"
+            f"{role} | {status_emoji.get(tx['status'], '❓')} {tx['status'].replace('_', ' ').title()}\n"
+            f"💵 {tx['amount']} USDT\n"
+            f"👥 {tx['buyer']} ↔️ {tx['seller']}\n\n"
+        )
+    
+    list_msg += "📊 Use /status TX_ID for detailed information"
+    bot.reply_to(message, list_msg, parse_mode='HTML')
 
 @bot.message_handler(commands=['deal'])
 def deal(message):
@@ -263,12 +407,17 @@ def dispute(message):
 @bot.message_handler(commands=['scammer'])
 def scammer(message):
     if not is_admin(message.from_user.username):
-        bot.reply_to(message, "🚫 Only admins can mark scammers.")
+        bot.reply_to(message, "🚫 <b>Access Denied!</b>\n\nOnly authorized admins can mark scammers.", parse_mode='HTML')
         return
     
     args = message.text.split()[1:]
     if len(args) != 1:
-        bot.reply_to(message, "Usage: /scammer @username")
+        bot.reply_to(message, 
+            "❗ <b>Usage Error</b>\n\n"
+            "📋 <b>Correct format:</b> <code>/scammer @username</code>\n"
+            "📝 <b>Example:</b> <code>/scammer @baduser123</code>", 
+            parse_mode='HTML'
+        )
         return
     
     user = args[0]
@@ -276,9 +425,220 @@ def scammer(message):
     if user not in blacklist:
         blacklist.append(user)
         save_blacklist(blacklist)
-        bot.reply_to(message, f"⚠️ {user} marked as a scammer. Escrow will not deal with them.")
+        bot.reply_to(message, 
+            f"🚨 <b>Scammer Alert!</b>\n\n"
+            f"⚠️ {user} has been marked as a scammer\n"
+            f"🛡️ Escrow will reject all future deals with this user\n"
+            f"📊 Total blacklisted users: {len(blacklist)}", 
+            parse_mode='HTML'
+        )
     else:
-        bot.reply_to(message, "Already blacklisted.")
+        bot.reply_to(message, 
+            f"ℹ️ <b>Already Blacklisted</b>\n\n"
+            f"{user} is already on the scammer list!", 
+            parse_mode='HTML'
+        )
+
+@bot.message_handler(commands=['deals'])
+def deals_admin(message):
+    if not is_admin(message.from_user.username):
+        bot.reply_to(message, "🚫 <b>Admin Only Command</b>\n\nThis command is restricted to authorized admins.", parse_mode='HTML')
+        return
+    
+    db = load_db()
+    if not db:
+        bot.reply_to(message, "📊 <b>No Active Deals</b>\n\nThere are currently no escrow transactions.", parse_mode='HTML')
+        return
+    
+    deals_msg = "🗂️ <b>All Escrow Deals</b>\n\n"
+    status_count = {"waiting_payment": 0, "paid": 0, "completed": 0, "refunded": 0}
+    
+    for tx_id, tx in list(db.items())[-10:]:  # Show last 10 deals
+        status_emoji = {"waiting_payment": "⏳", "paid": "💰", "completed": "✅", "refunded": "🔄"}
+        status_count[tx.get('status', 'unknown')] += 1
+        
+        deals_msg += (
+            f"🆔 <code>{tx_id}</code>\n"
+            f"👥 {tx['buyer']} ↔️ {tx['seller']}\n"
+            f"💵 {tx['amount']} USDT | {status_emoji.get(tx['status'], '❓')} {tx['status'].replace('_', ' ').title()}\n\n"
+        )
+    
+    summary = (
+        f"\n📈 <b>Summary:</b>\n"
+        f"⏳ Waiting Payment: {status_count['waiting_payment']}\n"
+        f"💰 Paid: {status_count['paid']}\n"
+        f"✅ Completed: {status_count['completed']}\n"
+        f"🔄 Refunded: {status_count['refunded']}\n"
+        f"📊 Total Deals: {len(db)}"
+    )
+    
+    deals_msg += summary
+    bot.reply_to(message, deals_msg, parse_mode='HTML')
+
+@bot.message_handler(commands=['emergency'])
+def emergency_refund(message):
+    if not is_admin(message.from_user.username):
+        bot.reply_to(message, "🚫 <b>Emergency Protocol Access Denied</b>\n\nOnly authorized admins can execute emergency refunds.", parse_mode='HTML')
+        return
+    
+    args = message.text.split()[1:]
+    if len(args) != 2:
+        bot.reply_to(message, 
+            "🚨 <b>Emergency Refund Protocol</b>\n\n"
+            "📋 <b>Usage:</b> <code>/emergency TX_ID REFUND_WALLET</code>\n"
+            "⚠️ <b>Warning:</b> This will immediately refund the transaction!\n"
+            "📝 <b>Example:</b> <code>/emergency 1234567890 0x123...abc</code>", 
+            parse_mode='HTML'
+        )
+        return
+
+    tx_id, refund_wallet = args
+    db = load_db()
+    tx = db.get(tx_id)
+    
+    if not tx:
+        bot.reply_to(message, 
+            "❌ <b>Transaction Not Found</b>\n\n"
+            f"No escrow transaction found with ID: <code>{tx_id}</code>", 
+            parse_mode='HTML'
+        )
+        return
+        
+    if tx["status"] not in ["paid", "waiting_payment"]:
+        bot.reply_to(message, 
+            f"⚠️ <b>Invalid Status for Refund</b>\n\n"
+            f"Transaction status: {tx['status']}\n"
+            f"Can only refund 'paid' transactions.", 
+            parse_mode='HTML'
+        )
+        return
+
+    try:
+        amount = int(tx["amount"] * (10 ** USDT_DECIMALS))
+        nonce = web3.eth.get_transaction_count(Web3.to_checksum_address(ESCROW_WALLET))
+        
+        bot.reply_to(message, 
+            f"🚨 <b>Emergency Refund Initiated</b>\n\n"
+            f"🆔 TX ID: <code>{tx_id}</code>\n"
+            f"💵 Amount: {tx['amount']} USDT\n"
+            f"🏦 Refund to: <code>{refund_wallet}</code>\n"
+            f"⏳ Processing blockchain transaction...", 
+            parse_mode='HTML'
+        )
+        
+        txn = usdt.functions.transfer(
+            Web3.to_checksum_address(refund_wallet),
+            amount
+        ).build_transaction({
+            'from': Web3.to_checksum_address(ESCROW_WALLET),
+            'gas': 100000,
+            'gasPrice': web3.to_wei('30', 'gwei'),
+            'nonce': nonce
+        })
+        
+        signed_txn = web3.eth.account.sign_transaction(txn, PRIVATE_KEY)
+        tx_hash = web3.eth.send_raw_transaction(signed_txn.rawTransaction)
+        
+        db[tx_id]["status"] = "emergency_refunded"
+        db[tx_id]["refund_hash"] = web3.to_hex(tx_hash)
+        save_db(db)
+        
+        bot.reply_to(message,
+            f"✅ <b>Emergency Refund Completed</b>\n\n"
+            f"💸 {tx['amount']} USDT refunded successfully\n"
+            f"🔗 <b>Transaction Hash:</b>\n<code>{web3.to_hex(tx_hash)}</code>\n"
+            f"👤 <b>Refunded to:</b> {refund_wallet}\n\n"
+            f"🛡️ Transaction marked as emergency refunded",
+            parse_mode="HTML"
+        )
+    except Exception as e:
+        bot.reply_to(message, 
+            f"❌ <b>Emergency Refund Failed</b>\n\n"
+            f"Error: {str(e)}\n"
+            f"Please try again or contact technical support.", 
+            parse_mode='HTML'
+        )
+
+@bot.message_handler(commands=['blacklist'])
+def view_blacklist(message):
+    if not is_admin(message.from_user.username):
+        bot.reply_to(message, "🚫 <b>Admin Only Command</b>\n\nThis command is restricted to authorized admins.", parse_mode='HTML')
+        return
+    
+    blacklist = load_blacklist()
+    if not blacklist:
+        bot.reply_to(message, "📝 <b>Blacklist is Empty</b>\n\nNo users are currently blacklisted.", parse_mode='HTML')
+        return
+    
+    blacklist_msg = f"🚫 <b>Blacklisted Users</b>\n\n"
+    for i, user in enumerate(blacklist, 1):
+        blacklist_msg += f"{i}. {user}\n"
+    
+    blacklist_msg += f"\n📊 Total: {len(blacklist)} blacklisted users"
+    bot.reply_to(message, blacklist_msg, parse_mode='HTML')
+
+@bot.message_handler(commands=['stats'])
+def stats_command(message):
+    db = load_db()
+    blacklist = load_blacklist()
+    balance = get_usdt_balance()
+    
+    if not db:
+        total_deals = 0
+        status_count = {"waiting_payment": 0, "paid": 0, "completed": 0, "refunded": 0}
+        total_volume = 0
+    else:
+        total_deals = len(db)
+        status_count = {"waiting_payment": 0, "paid": 0, "completed": 0, "refunded": 0}
+        total_volume = 0
+        
+        for tx in db.values():
+            status = tx.get('status', 'unknown')
+            if status in status_count:
+                status_count[status] += 1
+            total_volume += tx.get('amount', 0)
+    
+    stats_msg = (
+        "📊 <b>Escrow Bot Statistics</b>\n\n"
+        "💼 <b>Deal Summary:</b>\n"
+        f"📝 Total Deals: {total_deals}\n"
+        f"⏳ Waiting Payment: {status_count['waiting_payment']}\n"
+        f"💰 Paid & Active: {status_count['paid']}\n"
+        f"✅ Completed: {status_count['completed']}\n"
+        f"🔄 Refunded: {status_count['refunded']}\n\n"
+        f"💵 <b>Financial:</b>\n"
+        f"🏦 Current Balance: {balance} USDT\n"
+        f"📈 Total Volume: {total_volume:.2f} USDT\n\n"
+        f"🛡️ <b>Security:</b>\n"
+        f"🚫 Blacklisted Users: {len(blacklist)}\n"
+        f"🔒 Admins: {len(ADMIN_USERNAMES)}\n\n"
+        f"⚡ <b>Status:</b> Online & Monitoring 24/7"
+    )
+    
+    bot.reply_to(message, stats_msg, parse_mode='HTML')
+
+# Add a catch-all handler for unknown commands
+@bot.message_handler(func=lambda message: message.text.startswith('/'))
+def unknown_command(message):
+    unknown_msg = (
+        "❓ <b>Unknown Command</b>\n\n"
+        "📋 <b>Available Commands:</b>\n"
+        "🤝 /deal - Start new escrow\n"
+        "✅ /confirm - Confirm completion\n"
+        "💰 /balance - Check balance\n"
+        "📊 /status - Deal status\n"
+        "📝 /list - Your deals\n"
+        "💡 /help - Detailed help\n"
+        "ℹ️ /info - Bot information\n"
+        "📊 /stats - Bot statistics\n\n"
+        "🔒 <b>Admin Commands:</b>\n"
+        "🚫 /scammer - Mark scammer\n"
+        "🗂️ /deals - All deals\n"
+        "🚨 /emergency - Emergency refund\n"
+        "📝 /blacklist - View blacklist\n\n"
+        "💬 Need help? Use /help for detailed instructions!"
+    )
+    bot.reply_to(message, unknown_msg, parse_mode='HTML')
 
 # === PAYMENT MONITORING ===
 def monitor_payments():
