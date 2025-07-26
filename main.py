@@ -1009,9 +1009,52 @@ def deal(message):
     if message.chat.id != GROUP_ID:
         return
     
+    username = message.from_user.username
+    if not username:
+        bot.reply_to(message, "❌ Please set a Telegram username to use this feature.")
+        return
+    
+    # Check for active marketplace deals first (escrows.json)
+    escrows = load_db()
+    for deal_id, deal in escrows.items():
+        if deal["buyer"] == f"@{username}" or deal["seller"] == f"@{username}":
+            role = "💼 Buyer" if deal["buyer"] == f"@{username}" else "🛒 Seller"
+            status_emoji = {
+                "waiting_usdt_deposit": "⏳",
+                "usdt_deposited": "💰",
+                "buyer_paid": "💸",
+                "completed": "✅",
+                "disputed": "⚠️"
+            }
+            
+            bot.reply_to(message, 
+                f"🤝 <b>Active Deal Found!</b>\n\n"
+                f"🆔 <b>Deal ID:</b> <code>{deal_id}</code>\n"
+                f"👤 <b>Your Role:</b> {role}\n"
+                f"💵 <b>Amount:</b> {deal['amount']} USDT\n"
+                f"📍 <b>Status:</b> {status_emoji.get(deal['status'], '❓')} {deal['status'].replace('_', ' ').title()}\n\n"
+                f"💼 <b>Buyer:</b> {deal['buyer']}\n"
+                f"🛒 <b>Seller:</b> {deal['seller']}\n"
+                f"🏦 <b>Buyer Wallet:</b> <code>{deal.get('buyer_wallet', 'Not set')}</code>\n\n"
+                f"ℹ️ Use /mystatus for detailed trading information", 
+                parse_mode='HTML'
+            )
+            return
+    
+    # If no active marketplace deals, show legacy /deal usage
     args = message.text.split()[1:]  # Get arguments after /deal
     if len(args) != 4:
-        bot.reply_to(message, "❗ Usage: /deal @buyer @seller SELLER_WALLET AMOUNT")
+        bot.reply_to(message, 
+            "📝 <b>No Active Deal Found</b>\n\n"
+            "You don't have any active marketplace deals.\n\n"
+            "💡 <b>To start trading:</b>\n"
+            "• Use <code>/buy AMOUNT</code> to place buy orders\n"
+            "• Use <code>/sell AMOUNT</code> to place sell orders\n"
+            "• Orders auto-match when amounts are equal\n\n"
+            "📊 Check your status: /mystatus\n"
+            "📈 View all orders: /orders", 
+            parse_mode='HTML'
+        )
         return
 
     buyer, seller, seller_wallet, amount = args
@@ -1183,11 +1226,30 @@ def deals_admin(message):
         return
     
     deals_msg = "🗂️ <b>All Escrow Deals</b>\n\n"
-    status_count = {"waiting_payment": 0, "paid": 0, "completed": 0, "refunded": 0}
+    status_count = {
+        "waiting_payment": 0, 
+        "waiting_usdt_deposit": 0,
+        "paid": 0, 
+        "completed": 0, 
+        "refunded": 0,
+        "released": 0,
+        "unknown": 0
+    }
     
     for tx_id, tx in list(db.items())[-10:]:  # Show last 10 deals
-        status_emoji = {"waiting_payment": "⏳", "paid": "💰", "completed": "✅", "refunded": "🔄"}
-        status_count[tx.get('status', 'unknown')] += 1
+        status_emoji = {
+            "waiting_payment": "⏳", 
+            "waiting_usdt_deposit": "💰",
+            "paid": "💰", 
+            "completed": "✅", 
+            "refunded": "🔄",
+            "released": "✅"
+        }
+        status = tx.get('status', 'unknown')
+        if status in status_count:
+            status_count[status] += 1
+        else:
+            status_count['unknown'] += 1
         
         deals_msg += (
             f"🆔 <code>{tx_id}</code>\n"
@@ -1198,9 +1260,12 @@ def deals_admin(message):
     summary = (
         f"\n📈 <b>Summary:</b>\n"
         f"⏳ Waiting Payment: {status_count['waiting_payment']}\n"
+        f"💰 Waiting USDT: {status_count['waiting_usdt_deposit']}\n"
         f"💰 Paid: {status_count['paid']}\n"
         f"✅ Completed: {status_count['completed']}\n"
+        f"✅ Released: {status_count['released']}\n"
         f"🔄 Refunded: {status_count['refunded']}\n"
+        f"❓ Unknown: {status_count['unknown']}\n"
         f"📊 Total Deals: {len(db)}"
     )
     
@@ -1317,17 +1382,35 @@ def stats_command(message):
     
     if not db:
         total_deals = 0
-        status_count = {"waiting_payment": 0, "paid": 0, "completed": 0, "refunded": 0}
+        status_count = {
+            "waiting_payment": 0, 
+            "waiting_usdt_deposit": 0,
+            "paid": 0, 
+            "completed": 0, 
+            "refunded": 0,
+            "released": 0,
+            "unknown": 0
+        }
         total_volume = 0
     else:
         total_deals = len(db)
-        status_count = {"waiting_payment": 0, "paid": 0, "completed": 0, "refunded": 0}
+        status_count = {
+            "waiting_payment": 0, 
+            "waiting_usdt_deposit": 0,
+            "paid": 0, 
+            "completed": 0, 
+            "refunded": 0,
+            "released": 0,
+            "unknown": 0
+        }
         total_volume = 0
         
         for tx in db.values():
             status = tx.get('status', 'unknown')
             if status in status_count:
                 status_count[status] += 1
+            else:
+                status_count['unknown'] += 1
             total_volume += tx.get('amount', 0)
     
     stats_msg = (
