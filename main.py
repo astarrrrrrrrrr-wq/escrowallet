@@ -276,6 +276,7 @@ def buy_order(message):
             del orders["sell_orders"][sell_id]
             save_orders(orders)
             
+            # Send match notification to buyer
             bot.reply_to(message, 
                 f"🎯 <b>Instant Match Found!</b>\n\n"
                 f"🤝 Deal created automatically\n"
@@ -284,9 +285,28 @@ def buy_order(message):
                 f"💵 Amount: {amount} USDT\n"
                 f"🆔 Deal ID: <code>{order_id}</code>\n\n"
                 f"📋 <b>Next Steps:</b>\n"
-                f"1. {sell_order['seller']} sends USDT to escrow\n"
-                f"2. @{username} sends fiat payment\n"
-                f"3. Both confirm with /paid and /received", 
+                f"1. Wait for seller to deposit USDT to escrow\n"
+                f"2. Send fiat payment to seller\n"
+                f"3. Confirm with /paid when payment sent", 
+                parse_mode='HTML'
+            )
+            
+            # Send specific message to seller with escrow address
+            bot.send_message(
+                chat_id=GROUP_ID,
+                text=f"💰 <b>{sell_order['seller']} - URGENT ACTION REQUIRED</b>\n\n"
+                     f"🎯 Your sell order has been matched!\n"
+                     f"💼 Buyer: @{username}\n"
+                     f"💵 Amount: {amount} USDT\n"
+                     f"🆔 Deal ID: <code>{order_id}</code>\n\n"
+                     f"📋 <b>STEP 1 - Send USDT to Escrow:</b>\n"
+                     f"🏦 <b>Escrow Wallet Address:</b>\n"
+                     f"<code>{ESCROW_WALLET}</code>\n\n"
+                     f"⚠️ <b>Important:</b> Send exactly {amount} USDT\n"
+                     f"🔗 Network: Polygon (MATIC)\n"
+                     f"💎 Token: USDT\n\n"
+                     f"📱 After sending, buyer will send fiat payment\n"
+                     f"✅ Use /received when you get the fiat payment",
                 parse_mode='HTML'
             )
             return
@@ -359,6 +379,7 @@ def sell_order(message):
             del orders["buy_orders"][buy_id]
             save_orders(orders)
             
+            # Send match notification to seller with escrow details
             bot.reply_to(message, 
                 f"🎯 <b>Instant Match Found!</b>\n\n"
                 f"🤝 Deal created automatically\n"
@@ -366,11 +387,29 @@ def sell_order(message):
                 f"🛒 Seller: @{username}\n"
                 f"💵 Amount: {amount} USDT\n"
                 f"🆔 Deal ID: <code>{order_id}</code>\n\n"
-                f"📋 <b>Next Steps:</b>\n"
-                f"1. Send {amount} USDT to escrow:\n"
-                f"   <code>{ESCROW_WALLET}</code>\n"
-                f"2. {buy_order['buyer']} sends fiat payment\n"
-                f"3. Both confirm with /paid and /received", 
+                f"📋 <b>STEP 1 - Send USDT to Escrow:</b>\n"
+                f"🏦 <b>Escrow Wallet Address:</b>\n"
+                f"<code>{ESCROW_WALLET}</code>\n\n"
+                f"⚠️ <b>Important:</b> Send exactly {amount} USDT\n"
+                f"🔗 Network: Polygon (MATIC)\n"
+                f"💎 Token: USDT\n\n"
+                f"📱 After sending, buyer will send fiat payment\n"
+                f"✅ Use /received when you get the fiat payment", 
+                parse_mode='HTML'
+            )
+            
+            # Notify buyer about the match
+            bot.send_message(
+                chat_id=GROUP_ID,
+                text=f"💼 <b>{buy_order['buyer']} - Your Order Matched!</b>\n\n"
+                     f"🎯 Your buy order has been matched!\n"
+                     f"🛒 Seller: @{username}\n"
+                     f"💵 Amount: {amount} USDT\n"
+                     f"🆔 Deal ID: <code>{order_id}</code>\n\n"
+                     f"📋 <b>Next Steps:</b>\n"
+                     f"1. Wait for seller to deposit USDT to escrow\n"
+                     f"2. Send fiat payment to seller\n"
+                     f"3. Use /paid when you send fiat payment",
                 parse_mode='HTML'
             )
             return
@@ -409,7 +448,7 @@ def create_deal(buyer, seller, amount, buyer_wallet, deal_id):
     }
     save_db(db)
     
-    # Send notification to the group
+    # Send notification to the group with escrow address for seller
     bot.send_message(
         chat_id=GROUP_ID,
         text=f"🤝 <b>New Deal Created!</b>\n\n"
@@ -417,10 +456,13 @@ def create_deal(buyer, seller, amount, buyer_wallet, deal_id):
              f"🛒 Seller: {seller}\n"
              f"💵 Amount: {amount} USDT\n"
              f"🆔 Deal ID: <code>{deal_id}</code>\n\n"
-             f"📋 <b>Instructions:</b>\n"
-             f"1. {seller}: Send {amount} USDT to escrow\n"
-             f"2. {buyer}: Send fiat payment to {seller}\n"
-             f"3. Use /paid and /received to confirm",
+             f"📋 <b>{seller} - Send USDT to Escrow:</b>\n"
+             f"🏦 <code>{ESCROW_WALLET}</code>\n"
+             f"💎 Send exactly {amount} USDT on Polygon network\n\n"
+             f"📋 <b>{buyer} - Next Steps:</b>\n"
+             f"1. Wait for USDT deposit confirmation\n"
+             f"2. Send fiat payment to {seller}\n"
+             f"3. Use /paid and /received to confirm completion",
         parse_mode='HTML'
     )
 
