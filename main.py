@@ -106,6 +106,34 @@ def save_blacklist(data):
     with open(BLACKLIST_FILE, "w") as f:
         json.dump(data, f, indent=2)
 
+# === ORDERS DB ===
+ORDERS_FILE = "orders.json"
+if not os.path.exists(ORDERS_FILE):
+    with open(ORDERS_FILE, "w") as f:
+        json.dump({"buy_orders": {}, "sell_orders": {}}, f)
+
+def load_orders():
+    with open(ORDERS_FILE, "r") as f:
+        return json.load(f)
+
+def save_orders(data):
+    with open(ORDERS_FILE, "w") as f:
+        json.dump(data, f, indent=2)
+
+# === WALLETS DB ===
+WALLETS_FILE = "wallets.json"
+if not os.path.exists(WALLETS_FILE):
+    with open(WALLETS_FILE, "w") as f:
+        json.dump({}, f)
+
+def load_wallets():
+    with open(WALLETS_FILE, "r") as f:
+        return json.load(f)
+
+def save_wallets(data):
+    with open(WALLETS_FILE, "w") as f:
+        json.dump(data, f, indent=2)
+
 # === TELEGRAM BOT SETUP ===
 bot = telebot.TeleBot(BOT_TOKEN)
 
@@ -127,45 +155,643 @@ def get_usdt_balance():
 @bot.message_handler(commands=['start'])
 def start(message):
     welcome_msg = (
-        "🤖 <b>Welcome to Secure Escrow Bot!</b>\n\n"
-        "🛡️ Your trusted intermediary for safe crypto transactions\n\n"
-        "📋 <b>Available Commands:</b>\n"
-        "🤝 /deal - Start a new escrow deal\n"
-        "✅ /confirm - Confirm deal completion\n"
-        "💰 /balance - Check escrow wallet balance\n"
-        "📊 /status - View deal status\n"
-        "📝 /list - List all active deals\n"
-        "💡 /help - Show detailed help\n"
-        "ℹ️ /info - Bot and wallet information\n\n"
+        "🤖 <b>Welcome to USDT Trading Escrow Bot!</b>\n\n"
+        "🛡️ Safe P2P USDT trading with escrow protection\n\n"
+        "📋 <b>Trading Commands:</b>\n"
+        "🛒 /buy AMOUNT - Place buy order for USDT\n"
+        "💰 /sell AMOUNT - Place sell order for USDT\n"
+        "🏦 /mywallet ADDRESS - Set your USDT wallet\n"
+        "📝 /orders - View active buy/sell orders\n"
+        "📊 /mystatus - Your active trades\n\n"
+        "✅ <b>Deal Commands:</b>\n"
+        "💸 /paid - Confirm you sent fiat payment\n"
+        "✅ /received - Confirm you received fiat payment\n"
+        "❌ /notreceived - Report payment not received\n\n"
+        "ℹ️ <b>Info Commands:</b>\n"
+        "💡 /help - Detailed trading guide\n"
+        "💰 /balance - Check escrow balance\n"
+        "📊 /info - Bot information\n\n"
         "🔒 <b>Admin Commands:</b>\n"
-        "🚫 /scammer - Report scammer\n"
-        "🗂️ /deals - View all deals\n"
-        "🚨 /emergency - Emergency refund\n\n"
-        "💬 For support, contact our admins!"
+        "🚫 /scammer - Mark scammer\n"
+        "🛠️ /release @user - Force release USDT\n"
+        "🚨 /emergency - Emergency actions\n\n"
+        "💬 Start by setting your wallet: /mywallet YOUR_ADDRESS"
     )
     bot.reply_to(message, welcome_msg, parse_mode='HTML')
+
+@bot.message_handler(commands=['mywallet'])
+def set_wallet(message):
+    args = message.text.split()[1:]
+    if len(args) != 1:
+        bot.reply_to(message, 
+            "❗ <b>Usage Error</b>\n\n"
+            "📋 <b>Correct format:</b> <code>/mywallet YOUR_WALLET_ADDRESS</code>\n"
+            "📝 <b>Example:</b> <code>/mywallet 0x123...abc</code>", 
+            parse_mode='HTML'
+        )
+        return
+    
+    username = message.from_user.username
+    if not username:
+        bot.reply_to(message, "❌ Please set a Telegram username to use this feature.")
+        return
+    
+    wallet_address = args[0]
+    
+    # Basic wallet validation
+    if not wallet_address.startswith('0x') or len(wallet_address) != 42:
+        bot.reply_to(message, 
+            "❌ <b>Invalid Wallet Address</b>\n\n"
+            "Please provide a valid Ethereum/Polygon wallet address starting with 0x", 
+            parse_mode='HTML'
+        )
+        return
+    
+    wallets = load_wallets()
+    wallets[f"@{username}"] = wallet_address
+    save_wallets(wallets)
+    
+    bot.reply_to(message, 
+        f"✅ <b>Wallet Set Successfully!</b>\n\n"
+        f"👤 <b>User:</b> @{username}\n"
+        f"🏦 <b>Wallet:</b> <code>{wallet_address}</code>\n\n"
+        f"🛒 You can now place buy/sell orders!", 
+        parse_mode='HTML'
+    )
+
+@bot.message_handler(commands=['buy'])
+def buy_order(message):
+    if message.chat.id != GROUP_ID:
+        return
+    
+    username = message.from_user.username
+    if not username:
+        bot.reply_to(message, "❌ Please set a Telegram username to trade.")
+        return
+    
+    # Check if user is blacklisted
+    blacklist = load_blacklist()
+    if f"@{username}" in blacklist:
+        bot.reply_to(message, "🚫 <b>Access Denied</b>\n\nYou are blacklisted from trading.", parse_mode='HTML')
+        return
+    
+    # Check if user has set wallet
+    wallets = load_wallets()
+    if f"@{username}" not in wallets:
+        bot.reply_to(message, 
+            "❗ <b>Wallet Required</b>\n\n"
+            "Please set your USDT wallet first: <code>/mywallet YOUR_ADDRESS</code>", 
+            parse_mode='HTML'
+        )
+        return
+    
+    args = message.text.split()[1:]
+    if len(args) != 1:
+        bot.reply_to(message, 
+            "❗ <b>Usage Error</b>\n\n"
+            "📋 <b>Correct format:</b> <code>/buy AMOUNT</code>\n"
+            "📝 <b>Example:</b> <code>/buy 100</code>", 
+            parse_mode='HTML'
+        )
+        return
+    
+    try:
+        amount = float(args[0])
+        if amount <= 0:
+            raise ValueError("Amount must be positive")
+    except ValueError:
+        bot.reply_to(message, "❌ <b>Invalid Amount</b>\n\nPlease enter a valid positive number.", parse_mode='HTML')
+        return
+    
+    orders = load_orders()
+    order_id = str(int(time.time()))
+    
+    # Check for matching sell orders
+    for sell_id, sell_order in orders["sell_orders"].items():
+        if sell_order["amount"] == amount and sell_order["status"] == "active":
+            # Create automatic deal
+            create_deal(f"@{username}", sell_order["seller"], amount, wallets[f"@{username}"], order_id)
+            
+            # Remove the matched sell order
+            del orders["sell_orders"][sell_id]
+            save_orders(orders)
+            
+            bot.reply_to(message, 
+                f"🎯 <b>Instant Match Found!</b>\n\n"
+                f"🤝 Deal created automatically\n"
+                f"💼 Buyer: @{username}\n"
+                f"🛒 Seller: {sell_order['seller']}\n"
+                f"💵 Amount: {amount} USDT\n"
+                f"🆔 Deal ID: <code>{order_id}</code>\n\n"
+                f"📋 <b>Next Steps:</b>\n"
+                f"1. {sell_order['seller']} sends USDT to escrow\n"
+                f"2. @{username} sends fiat payment\n"
+                f"3. Both confirm with /paid and /received", 
+                parse_mode='HTML'
+            )
+            return
+    
+    # No match found, create buy order
+    orders["buy_orders"][order_id] = {
+        "buyer": f"@{username}",
+        "amount": amount,
+        "wallet": wallets[f"@{username}"],
+        "status": "active",
+        "created": time.time()
+    }
+    save_orders(orders)
+    
+    bot.reply_to(message, 
+        f"🛒 <b>Buy Order Created!</b>\n\n"
+        f"💼 Buyer: @{username}\n"
+        f"💵 Amount: {amount} USDT\n"
+        f"🏦 Your Wallet: <code>{wallets[f'@{username}']}</code>\n"
+        f"🆔 Order ID: <code>{order_id}</code>\n\n"
+        f"⏳ Waiting for a seller to match your order...\n"
+        f"📝 View all orders: /orders", 
+        parse_mode='HTML'
+    )
+
+@bot.message_handler(commands=['sell'])
+def sell_order(message):
+    if message.chat.id != GROUP_ID:
+        return
+    
+    username = message.from_user.username
+    if not username:
+        bot.reply_to(message, "❌ Please set a Telegram username to trade.")
+        return
+    
+    # Check if user is blacklisted
+    blacklist = load_blacklist()
+    if f"@{username}" in blacklist:
+        bot.reply_to(message, "🚫 <b>Access Denied</b>\n\nYou are blacklisted from trading.", parse_mode='HTML')
+        return
+    
+    args = message.text.split()[1:]
+    if len(args) != 1:
+        bot.reply_to(message, 
+            "❗ <b>Usage Error</b>\n\n"
+            "📋 <b>Correct format:</b> <code>/sell AMOUNT</code>\n"
+            "📝 <b>Example:</b> <code>/sell 100</code>", 
+            parse_mode='HTML'
+        )
+        return
+    
+    try:
+        amount = float(args[0])
+        if amount <= 0:
+            raise ValueError("Amount must be positive")
+    except ValueError:
+        bot.reply_to(message, "❌ <b>Invalid Amount</b>\n\nPlease enter a valid positive number.", parse_mode='HTML')
+        return
+    
+    orders = load_orders()
+    order_id = str(int(time.time()))
+    
+    # Check for matching buy orders
+    for buy_id, buy_order in orders["buy_orders"].items():
+        if buy_order["amount"] == amount and buy_order["status"] == "active":
+            # Create automatic deal
+            create_deal(buy_order["buyer"], f"@{username}", amount, buy_order["wallet"], order_id)
+            
+            # Remove the matched buy order
+            del orders["buy_orders"][buy_id]
+            save_orders(orders)
+            
+            bot.reply_to(message, 
+                f"🎯 <b>Instant Match Found!</b>\n\n"
+                f"🤝 Deal created automatically\n"
+                f"💼 Buyer: {buy_order['buyer']}\n"
+                f"🛒 Seller: @{username}\n"
+                f"💵 Amount: {amount} USDT\n"
+                f"🆔 Deal ID: <code>{order_id}</code>\n\n"
+                f"📋 <b>Next Steps:</b>\n"
+                f"1. Send {amount} USDT to escrow:\n"
+                f"   <code>{ESCROW_WALLET}</code>\n"
+                f"2. {buy_order['buyer']} sends fiat payment\n"
+                f"3. Both confirm with /paid and /received", 
+                parse_mode='HTML'
+            )
+            return
+    
+    # No match found, create sell order
+    orders["sell_orders"][order_id] = {
+        "seller": f"@{username}",
+        "amount": amount,
+        "status": "active",
+        "created": time.time()
+    }
+    save_orders(orders)
+    
+    bot.reply_to(message, 
+        f"💰 <b>Sell Order Created!</b>\n\n"
+        f"🛒 Seller: @{username}\n"
+        f"💵 Amount: {amount} USDT\n"
+        f"🆔 Order ID: <code>{order_id}</code>\n\n"
+        f"⏳ Waiting for a buyer to match your order...\n"
+        f"📝 View all orders: /orders", 
+        parse_mode='HTML'
+    )
+
+def create_deal(buyer, seller, amount, buyer_wallet, deal_id):
+    """Create a new escrow deal between matched buyer and seller"""
+    db = load_db()
+    db[deal_id] = {
+        "buyer": buyer,
+        "seller": seller,
+        "amount": amount,
+        "buyer_wallet": buyer_wallet,
+        "status": "waiting_usdt_deposit",
+        "buyer_confirmed": False,
+        "seller_confirmed": False,
+        "created": time.time()
+    }
+    save_db(db)
+    
+    # Send notification to the group
+    bot.send_message(
+        chat_id=GROUP_ID,
+        text=f"🤝 <b>New Deal Created!</b>\n\n"
+             f"💼 Buyer: {buyer}\n"
+             f"🛒 Seller: {seller}\n"
+             f"💵 Amount: {amount} USDT\n"
+             f"🆔 Deal ID: <code>{deal_id}</code>\n\n"
+             f"📋 <b>Instructions:</b>\n"
+             f"1. {seller}: Send {amount} USDT to escrow\n"
+             f"2. {buyer}: Send fiat payment to {seller}\n"
+             f"3. Use /paid and /received to confirm",
+        parse_mode='HTML'
+    )
+
+@bot.message_handler(commands=['orders'])
+def view_orders(message):
+    orders = load_orders()
+    
+    if not orders["buy_orders"] and not orders["sell_orders"]:
+        bot.reply_to(message, 
+            "📝 <b>No Active Orders</b>\n\n"
+            "There are currently no buy or sell orders.\n"
+            "Use /buy or /sell to create an order!", 
+            parse_mode='HTML'
+        )
+        return
+    
+    orders_msg = "📝 <b>Active Trading Orders</b>\n\n"
+    
+    if orders["buy_orders"]:
+        orders_msg += "🛒 <b>Buy Orders:</b>\n"
+        for order_id, order in orders["buy_orders"].items():
+            orders_msg += f"💰 {order['amount']} USDT - {order['buyer']}\n"
+        orders_msg += "\n"
+    
+    if orders["sell_orders"]:
+        orders_msg += "💰 <b>Sell Orders:</b>\n"
+        for order_id, order in orders["sell_orders"].items():
+            orders_msg += f"🛒 {order['amount']} USDT - {order['seller']}\n"
+    
+    orders_msg += "\n💡 Use /buy or /sell to place your order!"
+    bot.reply_to(message, orders_msg, parse_mode='HTML')
+
+@bot.message_handler(commands=['paid'])
+def confirm_paid(message):
+    username = message.from_user.username
+    if not username:
+        bot.reply_to(message, "❌ Please set a Telegram username to use this feature.")
+        return
+    
+    # Find active deal where user is the buyer
+    db = load_db()
+    user_deal = None
+    deal_id = None
+    
+    for tx_id, tx in db.items():
+        if tx["buyer"] == f"@{username}" and tx["status"] in ["waiting_usdt_deposit", "usdt_deposited"]:
+            user_deal = tx
+            deal_id = tx_id
+            break
+    
+    if not user_deal:
+        bot.reply_to(message, 
+            "❌ <b>No Active Deal Found</b>\n\n"
+            "You don't have any active deals where you're the buyer.", 
+            parse_mode='HTML'
+        )
+        return
+    
+    # Mark buyer as confirmed payment sent
+    db[deal_id]["buyer_confirmed"] = True
+    db[deal_id]["status"] = "buyer_paid"
+    save_db(db)
+    
+    bot.reply_to(message, 
+        f"✅ <b>Payment Confirmation Recorded</b>\n\n"
+        f"🆔 Deal ID: <code>{deal_id}</code>\n"
+        f"💸 You confirmed sending fiat payment\n"
+        f"⏳ Waiting for {user_deal['seller']} to confirm receipt\n\n"
+        f"📋 Next: {user_deal['seller']} should use /received", 
+        parse_mode='HTML'
+    )
+    
+    # Notify the seller
+    bot.send_message(
+        chat_id=GROUP_ID,
+        text=f"💸 <b>Payment Sent Notification</b>\n\n"
+             f"🆔 Deal ID: <code>{deal_id}</code>\n"
+             f"💼 {user_deal['buyer']} confirmed sending fiat payment\n"
+             f"🛒 {user_deal['seller']}: Please confirm if you received payment\n"
+             f"✅ Use /received if you got the payment\n"
+             f"❌ Use /notreceived if you didn't receive it",
+        parse_mode='HTML'
+    )
+
+@bot.message_handler(commands=['received'])
+def confirm_received(message):
+    username = message.from_user.username
+    if not username:
+        bot.reply_to(message, "❌ Please set a Telegram username to use this feature.")
+        return
+    
+    # Find active deal where user is the seller
+    db = load_db()
+    user_deal = None
+    deal_id = None
+    
+    for tx_id, tx in db.items():
+        if tx["seller"] == f"@{username}" and tx["status"] in ["buyer_paid", "usdt_deposited"]:
+            user_deal = tx
+            deal_id = tx_id
+            break
+    
+    if not user_deal:
+        bot.reply_to(message, 
+            "❌ <b>No Active Deal Found</b>\n\n"
+            "You don't have any active deals where you're the seller.", 
+            parse_mode='HTML'
+        )
+        return
+    
+    # Mark seller as confirmed payment received
+    db[deal_id]["seller_confirmed"] = True
+    save_db(db)
+    
+    # Check if both parties have confirmed
+    if db[deal_id]["buyer_confirmed"] and db[deal_id]["seller_confirmed"]:
+        # Both confirmed - release USDT automatically
+        try:
+            release_usdt_to_buyer(deal_id, user_deal)
+        except Exception as e:
+            bot.reply_to(message, 
+                f"❌ <b>Auto-release failed</b>\n\n"
+                f"Error: {str(e)}\n"
+                f"Admin intervention required.", 
+                parse_mode='HTML'
+            )
+    else:
+        bot.reply_to(message, 
+            f"✅ <b>Payment Receipt Confirmed</b>\n\n"
+            f"🆔 Deal ID: <code>{deal_id}</code>\n"
+            f"💰 You confirmed receiving fiat payment\n"
+            f"⏳ Waiting for final confirmation from {user_deal['buyer']}", 
+            parse_mode='HTML'
+        )
+
+@bot.message_handler(commands=['notreceived'])
+def payment_not_received(message):
+    username = message.from_user.username
+    if not username:
+        bot.reply_to(message, "❌ Please set a Telegram username to use this feature.")
+        return
+    
+    # Find active deal where user is the seller
+    db = load_db()
+    user_deal = None
+    deal_id = None
+    
+    for tx_id, tx in db.items():
+        if tx["seller"] == f"@{username}" and tx["status"] in ["buyer_paid", "usdt_deposited"]:
+            user_deal = tx
+            deal_id = tx_id
+            break
+    
+    if not user_deal:
+        bot.reply_to(message, 
+            "❌ <b>No Active Deal Found</b>\n\n"
+            "You don't have any active deals where you're the seller.", 
+            parse_mode='HTML'
+        )
+        return
+    
+    # Mark as disputed
+    db[deal_id]["status"] = "disputed"
+    db[deal_id]["dispute_reason"] = "Seller did not receive fiat payment"
+    save_db(db)
+    
+    bot.reply_to(message, 
+        f"⚠️ <b>Payment Dispute Opened</b>\n\n"
+        f"🆔 Deal ID: <code>{deal_id}</code>\n"
+        f"❌ You reported not receiving fiat payment\n"
+        f"🛠️ Deal marked for admin review\n\n"
+        f"📞 Admins will investigate and resolve this dispute.", 
+        parse_mode='HTML'
+    )
+    
+    # Notify admins
+    admin_msg = (
+        f"🚨 <b>PAYMENT DISPUTE</b>\n\n"
+        f"🆔 Deal ID: <code>{deal_id}</code>\n"
+        f"💼 Buyer: {user_deal['buyer']}\n"
+        f"🛒 Seller: {user_deal['seller']}\n"
+        f"💵 Amount: {user_deal['amount']} USDT\n"
+        f"❌ Issue: Seller did not receive fiat payment\n\n"
+        f"🛠️ Admin action required!"
+    )
+    
+    for admin in ADMIN_USERNAMES:
+        try:
+            bot.send_message(chat_id=GROUP_ID, text=admin_msg, parse_mode='HTML')
+            break
+        except:
+            continue
+
+def release_usdt_to_buyer(deal_id, deal):
+    """Automatically release USDT to buyer when both parties confirm"""
+    try:
+        amount = int(deal["amount"] * (10 ** USDT_DECIMALS))
+        nonce = web3.eth.get_transaction_count(Web3.to_checksum_address(ESCROW_WALLET))
+        
+        txn = usdt.functions.transfer(
+            Web3.to_checksum_address(deal["buyer_wallet"]),
+            amount
+        ).build_transaction({
+            'from': Web3.to_checksum_address(ESCROW_WALLET),
+            'gas': 100000,
+            'gasPrice': web3.to_wei('30', 'gwei'),
+            'nonce': nonce
+        })
+        
+        signed_txn = web3.eth.account.sign_transaction(txn, PRIVATE_KEY)
+        tx_hash = web3.eth.send_raw_transaction(signed_txn.rawTransaction)
+        
+        # Update deal status
+        db = load_db()
+        db[deal_id]["status"] = "completed"
+        db[deal_id]["tx_hash"] = web3.to_hex(tx_hash)
+        save_db(db)
+        
+        # Send completion notification
+        bot.send_message(
+            chat_id=GROUP_ID,
+            text=f"🎉 <b>Deal Completed Successfully!</b>\n\n"
+                 f"🆔 Deal ID: <code>{deal_id}</code>\n"
+                 f"💼 Buyer: {deal['buyer']}\n"
+                 f"🛒 Seller: {deal['seller']}\n"
+                 f"💵 Amount: {deal['amount']} USDT\n"
+                 f"✅ USDT sent to buyer's wallet\n"
+                 f"🔗 TX Hash: <code>{web3.to_hex(tx_hash)}</code>\n\n"
+                 f"🤝 Thank you for using our escrow service!",
+            parse_mode='HTML'
+        )
+        
+    except Exception as e:
+        raise Exception(f"Failed to release USDT: {str(e)}")
+
+@bot.message_handler(commands=['release'])
+def admin_release(message):
+    if not is_admin(message.from_user.username):
+        bot.reply_to(message, "🚫 <b>Admin Only Command</b>\n\nThis command is restricted to authorized admins.", parse_mode='HTML')
+        return
+    
+    args = message.text.split()[1:]
+    if len(args) != 1:
+        bot.reply_to(message, 
+            "❗ <b>Usage Error</b>\n\n"
+            "📋 <b>Correct format:</b> <code>/release @username</code>\n"
+            "📝 <b>Example:</b> <code>/release @user123</code>", 
+            parse_mode='HTML'
+        )
+        return
+    
+    target_user = args[0]
+    
+    # Find active deal where target user is the buyer
+    db = load_db()
+    user_deal = None
+    deal_id = None
+    
+    for tx_id, tx in db.items():
+        if tx["buyer"] == target_user and tx["status"] in ["waiting_usdt_deposit", "usdt_deposited", "buyer_paid", "disputed"]:
+            user_deal = tx
+            deal_id = tx_id
+            break
+    
+    if not user_deal:
+        bot.reply_to(message, 
+            f"❌ <b>No Active Deal Found</b>\n\n"
+            f"No active deals found for {target_user}.", 
+            parse_mode='HTML'
+        )
+        return
+    
+    try:
+        release_usdt_to_buyer(deal_id, user_deal)
+        bot.reply_to(message, 
+            f"✅ <b>Admin Release Successful</b>\n\n"
+            f"🆔 Deal ID: <code>{deal_id}</code>\n"
+            f"💼 Released to: {target_user}\n"
+            f"💵 Amount: {user_deal['amount']} USDT\n"
+            f"🛠️ Executed by admin override", 
+            parse_mode='HTML'
+        )
+    except Exception as e:
+        bot.reply_to(message, 
+            f"❌ <b>Admin Release Failed</b>\n\n"
+            f"Error: {str(e)}", 
+            parse_mode='HTML'
+        )
 
 @bot.message_handler(commands=['help'])
 def help_command(message):
     help_msg = (
-        "📖 <b>Detailed Help Guide</b>\n\n"
-        "🤝 <b>/deal @buyer @seller WALLET_ADDRESS AMOUNT</b>\n"
-        "   Start a new escrow transaction\n"
-        "   Example: <code>/deal @john @mike 0x123...abc 100</code>\n\n"
-        "✅ <b>/confirm TX_ID</b>\n"
-        "   Buyer confirms product/service received\n"
-        "   Example: <code>/confirm 1234567890</code>\n\n"
-        "💰 <b>/balance</b>\n"
-        "   Check current escrow wallet balance\n\n"
-        "📊 <b>/status TX_ID</b>\n"
-        "   Check status of specific transaction\n\n"
-        "📝 <b>/list</b>\n"
-        "   Show your active transactions\n\n"
-        "ℹ️ <b>/info</b>\n"
-        "   Display bot and wallet information\n\n"
-        "🛡️ <b>Security:</b> All funds are held securely until both parties confirm completion!"
+        "📖 <b>USDT Trading Guide</b>\n\n"
+        "🔹 <b>1. Set Your Wallet</b>\n"
+        "   <code>/mywallet 0x123...abc</code>\n\n"
+        "🔹 <b>2. Place Orders</b>\n"
+        "   <code>/buy 100</code> - Buy 100 USDT\n"
+        "   <code>/sell 50</code> - Sell 50 USDT\n\n"
+        "🔹 <b>3. Trading Process</b>\n"
+        "   • Orders auto-match when amounts match\n"
+        "   • Seller sends USDT to escrow wallet\n"
+        "   • Buyer sends fiat to seller\n"
+        "   • Both confirm: /paid and /received\n\n"
+        "🔹 <b>4. Confirmation Commands</b>\n"
+        "   <code>/paid</code> - Buyer confirms fiat sent\n"
+        "   <code>/received</code> - Seller confirms fiat received\n"
+        "   <code>/notreceived</code> - Report payment issue\n\n"
+        "🔹 <b>5. View Commands</b>\n"
+        "   <code>/orders</code> - See all active orders\n"
+        "   <code>/mystatus</code> - Your active trades\n"
+        "   <code>/balance</code> - Escrow balance\n\n"
+        "🛡️ <b>Security:</b> All USDT held in escrow until both parties confirm!"
     )
     bot.reply_to(message, help_msg, parse_mode='HTML')
+
+@bot.message_handler(commands=['mystatus'])
+def my_status(message):
+    username = message.from_user.username
+    if not username:
+        bot.reply_to(message, "❌ Please set a Telegram username to use this feature.")
+        return
+    
+    # Check active orders
+    orders = load_orders()
+    user_orders = []
+    
+    for order_id, order in orders["buy_orders"].items():
+        if order["buyer"] == f"@{username}":
+            user_orders.append(f"🛒 Buy Order: {order['amount']} USDT")
+    
+    for order_id, order in orders["sell_orders"].items():
+        if order["seller"] == f"@{username}":
+            user_orders.append(f"💰 Sell Order: {order['amount']} USDT")
+    
+    # Check active deals
+    db = load_db()
+    user_deals = []
+    
+    for deal_id, deal in db.items():
+        if deal["buyer"] == f"@{username}" or deal["seller"] == f"@{username}":
+            role = "💼 Buyer" if deal["buyer"] == f"@{username}" else "🛒 Seller"
+            status_emoji = {
+                "waiting_usdt_deposit": "⏳",
+                "usdt_deposited": "💰",
+                "buyer_paid": "💸",
+                "completed": "✅",
+                "disputed": "⚠️"
+            }
+            user_deals.append(
+                f"{role} | {status_emoji.get(deal['status'], '❓')} {deal['status'].replace('_', ' ').title()}\n"
+                f"   💵 {deal['amount']} USDT | ID: <code>{deal_id}</code>"
+            )
+    
+    status_msg = f"📊 <b>Your Trading Status</b>\n\n"
+    
+    if user_orders:
+        status_msg += "📝 <b>Active Orders:</b>\n"
+        for order in user_orders:
+            status_msg += f"   {order}\n"
+        status_msg += "\n"
+    
+    if user_deals:
+        status_msg += "🤝 <b>Active Deals:</b>\n"
+        for deal in user_deals:
+            status_msg += f"   {deal}\n\n"
+    
+    if not user_orders and not user_deals:
+        status_msg += "📝 No active orders or deals\n\n"
+        status_msg += "💡 Use /buy or /sell to start trading!"
+    
+    bot.reply_to(message, status_msg, parse_mode='HTML')
 
 @bot.message_handler(commands=['info'])
 def info_command(message):
