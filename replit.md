@@ -2,7 +2,7 @@
 
 ## Overview
 
-This is a Telegram bot project that provides escrow services for cryptocurrency transactions, specifically for USDT on the Polygon network. The bot acts as an intermediary for peer-to-peer transactions, holding funds in escrow until both parties fulfill their obligations.
+This is a sophisticated Telegram marketplace bot that provides automated USDT trading with escrow protection. The bot features a complete order matching system where buyers and sellers can post orders, get automatically matched, and complete trades with dual confirmation security on the Polygon network.
 
 ## User Preferences
 
@@ -12,9 +12,10 @@ Preferred communication style: Simple, everyday language.
 
 ### Core Architecture
 - **Backend**: Python-based application using Flask for web server functionality
-- **Bot Framework**: python-telegram-bot library for Telegram integration
+- **Bot Framework**: pyTelegramBotAPI library for Telegram integration
 - **Blockchain Integration**: Web3.py for Polygon network interaction
-- **Data Storage**: JSON file-based storage for simplicity (escrows.json, blacklist.json)
+- **Data Storage**: JSON file-based storage for simplicity (escrows.json, orders.json, wallets.json, blacklist.json)
+- **Trading Engine**: Automatic order matching and deal creation system
 
 ### Key Design Decisions
 - **Single-file architecture**: All functionality concentrated in main.py for simplicity
@@ -22,21 +23,29 @@ Preferred communication style: Simple, everyday language.
 - **Polygon network**: Chosen for low transaction fees compared to Ethereum mainnet
 - **USDT focus**: Specifically designed for USDT transactions (most common stablecoin)
 - **pyTelegramBotAPI**: Switched from python-telegram-bot for better compatibility and stability
+- **Marketplace model**: Order-book style trading with automatic matching instead of manual deal creation
+- **Dual confirmation**: Both buyer and seller must confirm before automatic USDT release
 
 ## Key Components
 
 ### 1. Telegram Bot Interface
 - Admin-controlled bot with specific authorized usernames
 - Group-based operations (specific GROUP_ID)
-- Command handlers for escrow management
+- Command handlers for marketplace trading and escrow management
+- User wallet management system
 
 ### 2. Blockchain Integration
 - Web3 connection to Polygon network via RPC
 - USDT contract interaction for balance checking and transfers
 - Wallet management with private key for escrow operations
 
-### 3. Escrow Management System
-- JSON-based escrow tracking
+### 3. Trading & Escrow Management System
+- JSON-based order book (buy_orders, sell_orders)
+- Automatic order matching and deal creation
+- Dual confirmation system (/paid and /received)
+- Automatic USDT release when both parties confirm
+- Dispute handling with admin intervention
+- User wallet address management
 - Blacklist functionality for user management
 - Multi-threaded operation support
 
@@ -49,25 +58,29 @@ Preferred communication style: Simple, everyday language.
 
 ## Recent Changes
 
-### July 26, 2025 - Enhanced Bot Commands & Monitoring
-- Added comprehensive `/health` endpoint for detailed system status monitoring
-- Added simple `/status` endpoint returning "OK" for basic uptime checks
-- Fixed Web3 middleware import for compatibility
-- Enhanced all bot commands with professional emojis and HTML formatting
-- Added new user commands: `/help`, `/info`, `/balance`, `/status`, `/list`, `/stats`
-- Added new admin commands: `/deals`, `/emergency`, `/blacklist`
-- Improved error handling and user feedback across all commands
-- Added catch-all handler for unknown commands with helpful guidance
-- Enhanced security messages and professional presentation
-- Ready for 24/7 UptimeRobot monitoring
+### July 26, 2025 - Major Marketplace Trading System Implementation
+- **Complete system redesign**: Transformed from basic escrow to marketplace-style trading
+- **Order book system**: Added `/buy` and `/sell` commands for posting orders
+- **Automatic matching**: Bot instantly creates deals when buy/sell orders match amounts
+- **Wallet management**: Added `/mywallet` command for users to set USDT delivery addresses
+- **Dual confirmation system**: Both `/paid` and `/received` commands required for completion
+- **Automatic USDT release**: When both parties confirm, USDT auto-transfers to buyer's wallet
+- **Dispute handling**: Added `/notreceived` command to flag payment issues
+- **Admin override**: New `/release @user` command for dispute resolution
+- **Enhanced user experience**: Added `/orders`, `/mystatus` commands for tracking
+- **Database expansion**: Added orders.json and wallets.json for marketplace functionality
+- **Professional UI**: Maintained emoji and HTML formatting throughout new commands
+- **Comprehensive help**: Updated `/help` command with complete trading workflow guide
 
 ## Data Flow
 
-1. **Escrow Creation**: Admin creates escrow through Telegram commands
-2. **Fund Deposit**: Users send USDT to escrow wallet address
-3. **Balance Verification**: Bot monitors blockchain for incoming transactions
-4. **Escrow Management**: Admin controls release/refund of escrowed funds
-5. **Transaction Completion**: Funds transferred to designated recipient
+1. **Order Placement**: Users post `/buy AMOUNT` or `/sell AMOUNT` orders
+2. **Automatic Matching**: Bot matches orders with same amount and creates deals
+3. **USDT Deposit**: Seller sends USDT to escrow wallet address
+4. **Fiat Transfer**: Buyer sends fiat payment to seller via bank transfer
+5. **Dual Confirmation**: Both parties confirm with `/paid` and `/received` commands
+6. **Automatic Release**: Bot automatically transfers USDT to buyer's wallet
+7. **Dispute Resolution**: Admin intervention with `/release` command if issues arise
 
 ## External Dependencies
 
@@ -97,7 +110,9 @@ Preferred communication style: Simple, everyday language.
 ```
 /
 ├── main.py           # Main application file
-├── escrows.json      # Escrow data storage
+├── escrows.json      # Active deals/escrow data storage
+├── orders.json       # Buy/sell order book
+├── wallets.json      # User wallet addresses
 ├── blacklist.json    # Blacklisted users
 └── attached_assets/  # Additional code snippets/backups
 ```
