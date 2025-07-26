@@ -4,9 +4,19 @@
     "seller": "@Indianarmy_1947",
     "amount": 1.0,
     "buyer_wallet": "0x75B6B1A908C8067Ab8925aC8C976A026d8E7088D",
+    "status": "buyer_paid",
+    "buyer_confirmed": true,
+    "seller_confirmed": true,
+    "created": 1753541086.5948224
+  },
+  "1753541816": {
+    "buyer": "@ASTARR000",
+    "seller": "@Babuva_king",
+    "amount": 0.1,
+    "buyer_wallet": "0x75B6B1A908C8067Ab8925aC8C976A026d8E7088D",
     "status": "waiting_usdt_deposit",
     "buyer_confirmed": false,
     "seller_confirmed": false,
-    "created": 1753541086.5948224
+    "created": 1753541816.7133656
   }
 }
