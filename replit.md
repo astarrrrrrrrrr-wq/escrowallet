@@ -71,6 +71,8 @@ Preferred communication style: Simple, everyday language.
 - **Database expansion**: Added orders.json and wallets.json for marketplace functionality
 - **Professional UI**: Maintained emoji and HTML formatting throughout new commands
 - **Comprehensive help**: Updated `/help` command with complete trading workflow guide
+- **Enhanced messaging**: Clear escrow wallet address delivery to sellers when deals match
+- **User-specific notifications**: Personalized messages for buyers and sellers with role-specific instructions
 
 ## Data Flow
 
