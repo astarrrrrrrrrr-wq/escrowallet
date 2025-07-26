@@ -5,11 +5,12 @@ import threading
 from web3 import Web3
 
 from flask import Flask
+
 import telebot
 
 # === BOT & WALLET CONFIG ===
 BOT_TOKEN = os.getenv("BOT_TOKEN", "7705638552:AAHN7YJ-8fB6l_CMp_L9tbZDfNMdpQj2Fc4")
-ADMIN_USERNAMES = ["Indianarmy_1947", "Threethirty330"]
+ADMIN_USERNAMES = ["Indianarmy_1947", "Threethirty330","@ASTARR000"]
 GROUP_ID = -1002830799357
 
 ESCROW_WALLET = "0x5a2dD9bFe9cB39F6A1AD806747ce29718b1BfB70"
@@ -17,7 +18,7 @@ PRIVATE_KEY = os.getenv("PRIVATE_KEY", "26ff32efb7b61a3602cc693b77f824427353f20d
 
 # === POLYGON CONFIG ===
 RPC_URL = "https://polygon-rpc.com"
-USDT_CONTRACT = "0xc2132D05D31c914a87C6611C10748AeCB8fA48b6"
+USDT_CONTRACT = "0xc2132d05d31c914a87c6611c10748aeb04b58e8f"
 USDT_DECIMALS = 6
 
 # === WEB3 SETUP ===
