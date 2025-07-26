@@ -163,6 +163,45 @@ def get_usdt_balance():
         print(f"⚠️ Error fetching balance: {e}")
         return 0
 
+def get_matic_balance():
+    """Get MATIC balance for gas fees"""
+    try:
+        checksum_address = Web3.to_checksum_address(ESCROW_WALLET)
+        balance = web3.eth.get_balance(checksum_address)
+        matic_balance = web3.from_wei(balance, 'ether')
+        print(f"✅ MATIC balance: {matic_balance} MATIC")
+        return float(matic_balance)
+    except Exception as e:
+        print(f"⚠️ Error fetching MATIC balance: {e}")
+        return 0
+
+def check_wallet_balances():
+    """Check both USDT and MATIC balances and notify if low"""
+    usdt_balance = get_usdt_balance()
+    matic_balance = get_matic_balance()
+    
+    # Check if MATIC balance is too low for transactions (less than 0.01 MATIC)
+    if matic_balance < 0.01:
+        warning_msg = (
+            f"🚨 <b>CRITICAL: Low MATIC Balance</b>\n\n"
+            f"⚠️ <b>Current MATIC:</b> {matic_balance:.6f} MATIC\n"
+            f"💵 <b>Current USDT:</b> {usdt_balance} USDT\n\n"
+            f"❌ <b>Cannot process withdrawals!</b>\n"
+            f"🏦 <b>Escrow Wallet:</b>\n<code>{ESCROW_WALLET}</code>\n\n"
+            f"🔧 <b>Action Required:</b> Send MATIC to escrow wallet for gas fees"
+        )
+        
+        # Notify all admins
+        for admin in ADMIN_USERNAMES:
+            try:
+                bot.send_message(chat_id=GROUP_ID, text=warning_msg, parse_mode='HTML')
+                break
+            except:
+                continue
+                
+        return False
+    return True
+
 # === BOT COMMAND HANDLERS ===
 @bot.message_handler(commands=['start'])
 def start(message):
@@ -186,6 +225,7 @@ def start(message):
         "🔒 <b>Admin Commands:</b>\n"
         "🚫 /scammer - Mark scammer\n"
         "🛠️ /release @user - Force release USDT\n"
+        "⚡ /forcerelease DEAL_ID - Force release by deal ID\n"
         "🚨 /emergency - Emergency actions\n\n"
         "💬 Start by setting your wallet: /mywallet YOUR_ADDRESS"
     )
@@ -649,8 +689,11 @@ def confirm_received(message):
         except Exception as e:
             bot.reply_to(message, 
                 f"❌ <b>Auto-release failed</b>\n\n"
-                f"Error: {str(e)}\n"
-                f"Admin intervention required.", 
+                f"🆔 <b>Deal ID:</b> <code>{deal_id}</code>\n"
+                f"💵 <b>Amount:</b> {user_deal['amount']} USDT\n"
+                f"🚨 <b>Error:</b> {str(e)}\n\n"
+                f"🛠️ <b>Admin intervention required.</b>\n"
+                f"Use /forcerelease {deal_id} when MATIC is funded", 
                 parse_mode='HTML'
             )
     else:
@@ -723,6 +766,23 @@ def payment_not_received(message):
 def release_usdt_to_buyer(deal_id, deal):
     """Automatically release USDT to buyer when both parties confirm"""
     try:
+        # Check MATIC balance first
+        matic_balance = get_matic_balance()
+        if matic_balance < 0.005:  # Need at least 0.005 MATIC for gas
+            error_msg = (
+                f"❌ <b>Auto-release failed</b>\n\n"
+                f"🚨 <b>Error:</b> Insufficient MATIC for gas fees\n"
+                f"⚠️ <b>Current MATIC:</b> {matic_balance:.6f} MATIC\n"
+                f"🆔 <b>Deal ID:</b> <code>{deal_id}</code>\n"
+                f"💵 <b>Amount:</b> {deal['amount']} USDT\n\n"
+                f"🏦 <b>Escrow Wallet needs MATIC:</b>\n"
+                f"<code>{ESCROW_WALLET}</code>\n\n"
+                f"🔧 <b>Admin intervention required.</b>"
+            )
+            
+            bot.send_message(chat_id=GROUP_ID, text=error_msg, parse_mode='HTML')
+            raise Exception(f"Insufficient MATIC balance: {matic_balance:.6f} MATIC (need 0.005+)")
+        
         amount = int(deal["amount"] * (10 ** USDT_DECIMALS))
         nonce = web3.eth.get_transaction_count(Web3.to_checksum_address(ESCROW_WALLET))
         
@@ -813,6 +873,78 @@ def admin_release(message):
         bot.reply_to(message, 
             f"❌ <b>Admin Release Failed</b>\n\n"
             f"Error: {str(e)}", 
+            parse_mode='HTML'
+        )
+
+@bot.message_handler(commands=['forcerelease'])
+def force_release(message):
+    """Force release command for specific deal IDs when auto-release fails"""
+    if not is_admin(message.from_user.username):
+        bot.reply_to(message, "🚫 <b>Admin Only Command</b>\n\nThis command is restricted to authorized admins.", parse_mode='HTML')
+        return
+    
+    args = message.text.split()[1:]
+    if len(args) != 1:
+        bot.reply_to(message, 
+            "❗ <b>Usage Error</b>\n\n"
+            "📋 <b>Correct format:</b> <code>/forcerelease DEAL_ID</code>\n"
+            "📝 <b>Example:</b> <code>/forcerelease 1234567890</code>", 
+            parse_mode='HTML'
+        )
+        return
+    
+    deal_id = args[0]
+    db = load_db()
+    
+    if deal_id not in db:
+        bot.reply_to(message, 
+            f"❌ <b>Deal Not Found</b>\n\n"
+            f"No deal found with ID: <code>{deal_id}</code>", 
+            parse_mode='HTML'
+        )
+        return
+    
+    deal = db[deal_id]
+    
+    # Check if deal is in a valid state for release
+    if deal["status"] not in ["buyer_paid", "disputed"]:
+        bot.reply_to(message, 
+            f"⚠️ <b>Invalid Deal Status</b>\n\n"
+            f"🆔 Deal ID: <code>{deal_id}</code>\n"
+            f"📍 Current status: {deal['status']}\n"
+            f"✅ Required status: buyer_paid or disputed", 
+            parse_mode='HTML'
+        )
+        return
+    
+    # Check MATIC balance before attempting
+    matic_balance = get_matic_balance()
+    if matic_balance < 0.005:
+        bot.reply_to(message, 
+            f"❌ <b>Force Release Failed</b>\n\n"
+            f"🚨 <b>Error:</b> Insufficient MATIC for gas fees\n"
+            f"⚠️ <b>Current MATIC:</b> {matic_balance:.6f} MATIC\n"
+            f"🏦 <b>Escrow Wallet:</b>\n<code>{ESCROW_WALLET}</code>\n\n"
+            f"🔧 <b>Action Required:</b> Send MATIC to wallet first", 
+            parse_mode='HTML'
+        )
+        return
+    
+    try:
+        release_usdt_to_buyer(deal_id, deal)
+        bot.reply_to(message, 
+            f"✅ <b>Force Release Successful</b>\n\n"
+            f"🆔 Deal ID: <code>{deal_id}</code>\n"
+            f"💼 Released to: {deal['buyer']}\n"
+            f"💵 Amount: {deal['amount']} USDT\n"
+            f"🛠️ Executed by admin override", 
+            parse_mode='HTML'
+        )
+    except Exception as e:
+        bot.reply_to(message, 
+            f"❌ <b>Force Release Failed</b>\n\n"
+            f"🆔 Deal ID: <code>{deal_id}</code>\n"
+            f"🚨 Error: {str(e)}", 
             parse_mode='HTML'
         )
 
@@ -916,15 +1048,34 @@ def info_command(message):
 
 @bot.message_handler(commands=['balance'])
 def balance_command(message):
-    balance = get_usdt_balance()
+    if not is_admin(message.from_user.username):
+        bot.reply_to(message, "🚫 Only admins can check balance.")
+        return
+    
+    usdt_balance = get_usdt_balance()
+    matic_balance = get_matic_balance()
+    
+    # Check transaction capability
+    can_transact = matic_balance >= 0.005
+    status_emoji = "✅" if can_transact else "❌"
+    status_text = "Ready for transactions" if can_transact else "Cannot process transactions"
+    
     balance_msg = (
-        "💰 <b>Escrow Wallet Balance</b>\n\n"
-        "🏦 <b>Address:</b>\n<code>{}</code>\n\n"
-        "💵 <b>Current Balance:</b> {} USDT\n"
-        "🌐 <b>Network:</b> Polygon\n"
-        "⏰ <b>Last Updated:</b> Just now\n\n"
-        "✅ All funds are secure and monitored 24/7!"
-    ).format(ESCROW_WALLET, balance)
+        f"💰 <b>Escrow Wallet Status</b>\n\n"
+        f"💎 <b>USDT Balance:</b> {usdt_balance} USDT\n"
+        f"⛽ <b>MATIC Balance:</b> {matic_balance:.6f} MATIC\n\n"
+        f"{status_emoji} <b>Status:</b> {status_text}\n\n"
+        f"🏦 <b>Wallet Address:</b>\n<code>{ESCROW_WALLET}</code>\n\n"
+    )
+    
+    if not can_transact:
+        balance_msg += (
+            f"⚠️ <b>Action Required:</b>\n"
+            f"Send at least 0.01 MATIC to wallet for gas fees"
+        )
+    else:
+        balance_msg += "✅ All systems operational!"
+    
     bot.reply_to(message, balance_msg, parse_mode='HTML')
 
 @bot.message_handler(commands=['status'])

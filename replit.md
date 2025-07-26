@@ -58,6 +58,19 @@ Preferred communication style: Simple, everyday language.
 
 ## Recent Changes
 
+### July 26, 2025 - Critical Bug Fix: MATIC Balance Issue Resolution
+- **Root Cause Identified**: Escrow wallet had 0 MATIC balance, preventing USDT withdrawals
+- **Error Symptom**: Users receiving "INTERNAL_ERROR: insufficient funds" when trying to withdraw
+- **Comprehensive Solution Implemented**:
+  - Added `get_matic_balance()` function to monitor gas fees
+  - Enhanced `release_usdt_to_buyer()` with pre-transaction MATIC balance validation
+  - Created `check_wallet_balances()` with automatic admin notifications for low MATIC
+  - Updated `/balance` command for admins to show both USDT and MATIC balances
+  - Added `/forcerelease DEAL_ID` command for manual intervention after MATIC funding
+  - Improved error messages with clear instructions for funding the escrow wallet
+- **Prevention Measures**: Automated alerts when MATIC balance drops below 0.01 MATIC
+- **Admin Tools**: Enhanced balance monitoring and force release capabilities
+
 ### July 26, 2025 - Major Marketplace Trading System Implementation
 - **Complete system redesign**: Transformed from basic escrow to marketplace-style trading
 - **Order book system**: Added `/buy` and `/sell` commands for posting orders
