@@ -205,9 +205,32 @@ def check_wallet_balances():
 # === BOT COMMAND HANDLERS ===
 @bot.message_handler(commands=['start'])
 def start(message):
+    # Check if there's an active deal
+    db = load_db()
+    active_deal = None
+    active_users = []
+    
+    for deal_id, deal in db.items():
+        if deal["status"] in ["waiting_usdt_deposit", "usdt_deposited", "buyer_paid", "disputed"]:
+            active_deal = deal_id
+            active_users = [deal["buyer"], deal["seller"]]
+            break
+    
+    queue_status = ""
+    if active_deal:
+        queue_status = (
+            f"\n⏳ <b>Current Status:</b> Deal in progress\n"
+            f"👥 Active: {active_users[0]} ↔️ {active_users[1]}\n"
+            f"📝 Deal ID: <code>{active_deal}</code>\n"
+        )
+    else:
+        queue_status = "\n🚀 <b>Status:</b> Trading queue is open!"
+    
     welcome_msg = (
         "🤖 <b>Welcome to USDT Trading Escrow Bot!</b>\n\n"
-        "🛡️ Safe P2P USDT trading with escrow protection\n\n"
+        "🛡️ Safe P2P USDT trading with escrow protection\n"
+        "⚠️ <b>Note:</b> Only one deal allowed at a time"
+        f"{queue_status}\n\n"
         "📋 <b>Trading Commands:</b>\n"
         "🛒 /buy AMOUNT - Place buy order for USDT\n"
         "💰 /sell AMOUNT - Place sell order for USDT\n"
@@ -295,6 +318,39 @@ def buy_order(message):
     blacklist = load_blacklist()
     if f"@{username}" in blacklist:
         bot.reply_to(message, "🚫 <b>Access Denied</b>\n\nYou are blacklisted from trading.", parse_mode='HTML')
+        return
+    
+    # Check if there's already an active deal
+    db = load_db()
+    active_deal = None
+    active_users = []
+    
+    for deal_id, deal in db.items():
+        if deal["status"] in ["waiting_usdt_deposit", "usdt_deposited", "buyer_paid", "disputed"]:
+            active_deal = deal_id
+            active_users = [deal["buyer"], deal["seller"]]
+            break
+    
+    if active_deal:
+        bot.reply_to(message, 
+            f"⏳ <b>Deal In Progress</b>\n\n"
+            f"🚫 Only one deal allowed at a time\n"
+            f"📝 Active Deal ID: <code>{active_deal}</code>\n"
+            f"👥 Participants: {active_users[0]} ↔️ {active_users[1]}\n\n"
+            f"⏰ Please wait for the current deal to complete\n"
+            f"📊 Check status with /deals (admin only)", 
+            parse_mode='HTML'
+        )
+        
+        # Tag the active users
+        bot.send_message(
+            chat_id=GROUP_ID,
+            text=f"📢 <b>Attention {active_users[0]} and {active_users[1]}</b>\n\n"
+                 f"🔔 @{username} is waiting to trade\n"
+                 f"⚡ Please complete your current deal: <code>{active_deal}</code>\n"
+                 f"🤝 Others are waiting for the trading queue!",
+            parse_mode='HTML'
+        )
         return
     
     # Check if user has set wallet
@@ -434,6 +490,39 @@ def sell_order(message):
     blacklist = load_blacklist()
     if f"@{username}" in blacklist:
         bot.reply_to(message, "🚫 <b>Access Denied</b>\n\nYou are blacklisted from trading.", parse_mode='HTML')
+        return
+    
+    # Check if there's already an active deal
+    db = load_db()
+    active_deal = None
+    active_users = []
+    
+    for deal_id, deal in db.items():
+        if deal["status"] in ["waiting_usdt_deposit", "usdt_deposited", "buyer_paid", "disputed"]:
+            active_deal = deal_id
+            active_users = [deal["buyer"], deal["seller"]]
+            break
+    
+    if active_deal:
+        bot.reply_to(message, 
+            f"⏳ <b>Deal In Progress</b>\n\n"
+            f"🚫 Only one deal allowed at a time\n"
+            f"📝 Active Deal ID: <code>{active_deal}</code>\n"
+            f"👥 Participants: {active_users[0]} ↔️ {active_users[1]}\n\n"
+            f"⏰ Please wait for the current deal to complete\n"
+            f"📊 Check status with /deals (admin only)", 
+            parse_mode='HTML'
+        )
+        
+        # Tag the active users
+        bot.send_message(
+            chat_id=GROUP_ID,
+            text=f"📢 <b>Attention {active_users[0]} and {active_users[1]}</b>\n\n"
+                 f"🔔 @{username} is waiting to trade\n"
+                 f"⚡ Please complete your current deal: <code>{active_deal}</code>\n"
+                 f"🤝 Others are waiting for the trading queue!",
+            parse_mode='HTML'
+        )
         return
     
     args = message.text.split()[1:]
@@ -815,7 +904,9 @@ def release_usdt_to_buyer(deal_id, deal):
                  f"💵 Amount: {deal['amount']} USDT\n"
                  f"✅ USDT sent to buyer's wallet\n"
                  f"🔗 TX Hash: <code>{web3.to_hex(tx_hash)}</code>\n\n"
-                 f"🤝 Thank you for using our escrow service!",
+                 f"🤝 Thank you for using our escrow service!\n\n"
+                 f"🚀 <b>Trading Queue is Now Open!</b>\n"
+                 f"📈 Others can now place /buy or /sell orders",
             parse_mode='HTML'
         )
         
