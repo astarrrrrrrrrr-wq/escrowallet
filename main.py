@@ -1800,123 +1800,123 @@ def monitor_payments():
                     # Check for deals waiting for USDT deposit
                     for deal_id, deal in db.items():
                         if deal["status"] == "waiting_usdt_deposit":
-                        expected_amount = deal["amount"]
-                        
-                        # Check if the deposit amount matches exactly (with small tolerance for precision)
-                        if abs(diff - expected_amount) < 0.0001:
-                            print(f"✅ Exact match found for deal {deal_id}: {expected_amount} USDT")
+                            expected_amount = deal["amount"]
                             
-                            # Check if deal is still valid (not expired)
-                            deal_age = time.time() - int(deal_id)
-                            if deal_age > (DEAL_EXPIRY_HOURS * 3600):
-                                print(f"❌ Deal {deal_id} expired, ignoring payment")
-                                continue
-                            
-                            # Update deal status
-                            db[deal_id]["status"] = "usdt_deposited"
-                            db[deal_id]["deposit_confirmed_at"] = time.time()
-                            save_db(db)
-                            
-                            # Notify about successful deposit and next steps
-                            bot.send_message(
-                                chat_id=GROUP_ID,
-                                text=f"✅ <b>USDT PAYMENT RECEIVED!</b>\n\n"
-                                     f"💰 Amount: {expected_amount} USDT received in escrow\n"
-                                     f"🆔 Deal ID: <code>{deal_id}</code>\n"
-                                     f"✅ Amount matches exactly - proceeding with deal\n\n"
-                                     f"📋 <b>{deal['buyer']} - ACTION REQUIRED:</b>\n"
-                                     f"💸 Now send fiat payment to {deal['seller']}\n"
-                                     f"✅ Use /paid when you send the fiat payment\n\n"
-                                     f"📋 <b>{deal['seller']} - Next Steps:</b>\n"
-                                     f"⏳ Wait for fiat payment from {deal['buyer']}\n"
-                                     f"✅ Use /received when you get the fiat payment",
-                                parse_mode='HTML'
-                            )
-                            break
-                        
-                        elif diff > expected_amount:
-                            print(f"⚠️ Overpayment detected for deal {deal_id}: Received {diff}, Expected {expected_amount}")
-                            
-                            # Cancel deal due to wrong amount
-                            db[deal_id]["status"] = "cancelled_wrong_amount"
-                            db[deal_id]["received_amount"] = diff
-                            save_db(db)
-                            
-                            # Notify about cancellation
-                            bot.send_message(
-                                chat_id=GROUP_ID,
-                                text=f"❌ <b>DEAL CANCELLED - WRONG AMOUNT</b>\n\n"
-                                     f"🆔 Deal ID: <code>{deal_id}</code>\n"
-                                     f"💵 Expected: {expected_amount} USDT\n"
-                                     f"💰 Received: {diff} USDT\n"
-                                     f"⚠️ Amount mismatch detected\n\n"
-                                     f"🛠️ <b>ADMIN INTERVENTION REQUIRED</b>\n"
-                                     f"📞 Deal cancelled, waiting for admin to handle refund\n"
-                                     f"👥 Participants: {deal['buyer']} ↔️ {deal['seller']}\n\n"
-                                     f"🔔 Admins will process the refund manually",
-                                parse_mode='HTML'
-                            )
-                            
-                            # Notify admins specifically
-                            admin_msg = (
-                                f"🚨 <b>ADMIN ALERT: WRONG PAYMENT AMOUNT</b>\n\n"
-                                f"🆔 Deal ID: <code>{deal_id}</code>\n"
-                                f"💵 Expected: {expected_amount} USDT\n"
-                                f"💰 Received: {diff} USDT\n"
-                                f"👥 Buyer: {deal['buyer']}\n"
-                                f"👥 Seller: {deal['seller']}\n\n"
-                                f"🛠️ Action required: Process refund with /emergency {deal_id} WALLET_ADDRESS"
-                            )
-                            
-                            for admin in ADMIN_USERNAMES:
-                                try:
-                                    bot.send_message(chat_id=GROUP_ID, text=admin_msg, parse_mode='HTML')
-                                    break
-                                except:
+                            # Check if the deposit amount matches exactly (with small tolerance for precision)
+                            if abs(diff - expected_amount) < 0.0001:
+                                print(f"✅ Exact match found for deal {deal_id}: {expected_amount} USDT")
+                                
+                                # Check if deal is still valid (not expired)
+                                deal_age = time.time() - int(deal_id)
+                                if deal_age > (DEAL_EXPIRY_HOURS * 3600):
+                                    print(f"❌ Deal {deal_id} expired, ignoring payment")
                                     continue
-                            break
-                        
-                        elif diff < expected_amount:
-                            print(f"⚠️ Underpayment detected for deal {deal_id}: Received {diff}, Expected {expected_amount}")
+                                
+                                # Update deal status
+                                db[deal_id]["status"] = "usdt_deposited"
+                                db[deal_id]["deposit_confirmed_at"] = time.time()
+                                save_db(db)
+                                
+                                # Notify about successful deposit and next steps
+                                bot.send_message(
+                                    chat_id=GROUP_ID,
+                                    text=f"✅ <b>USDT PAYMENT RECEIVED!</b>\n\n"
+                                         f"💰 Amount: {expected_amount} USDT received in escrow\n"
+                                         f"🆔 Deal ID: <code>{deal_id}</code>\n"
+                                         f"✅ Amount matches exactly - proceeding with deal\n\n"
+                                         f"📋 <b>{deal['buyer']} - ACTION REQUIRED:</b>\n"
+                                         f"💸 Now send fiat payment to {deal['seller']}\n"
+                                         f"✅ Use /paid when you send the fiat payment\n\n"
+                                         f"📋 <b>{deal['seller']} - Next Steps:</b>\n"
+                                         f"⏳ Wait for fiat payment from {deal['buyer']}\n"
+                                         f"✅ Use /received when you get the fiat payment",
+                                    parse_mode='HTML'
+                                )
+                                break
                             
-                            # Cancel deal due to wrong amount
-                            db[deal_id]["status"] = "cancelled_wrong_amount"
-                            db[deal_id]["received_amount"] = diff
-                            save_db(db)
+                            elif diff > expected_amount:
+                                print(f"⚠️ Overpayment detected for deal {deal_id}: Received {diff}, Expected {expected_amount}")
+                                
+                                # Cancel deal due to wrong amount
+                                db[deal_id]["status"] = "cancelled_wrong_amount"
+                                db[deal_id]["received_amount"] = diff
+                                save_db(db)
+                                
+                                # Notify about cancellation
+                                bot.send_message(
+                                    chat_id=GROUP_ID,
+                                    text=f"❌ <b>DEAL CANCELLED - WRONG AMOUNT</b>\n\n"
+                                         f"🆔 Deal ID: <code>{deal_id}</code>\n"
+                                         f"💵 Expected: {expected_amount} USDT\n"
+                                         f"💰 Received: {diff} USDT\n"
+                                         f"⚠️ Amount mismatch detected\n\n"
+                                         f"🛠️ <b>ADMIN INTERVENTION REQUIRED</b>\n"
+                                         f"📞 Deal cancelled, waiting for admin to handle refund\n"
+                                         f"👥 Participants: {deal['buyer']} ↔️ {deal['seller']}\n\n"
+                                         f"🔔 Admins will process the refund manually",
+                                    parse_mode='HTML'
+                                )
+                                
+                                # Notify admins specifically
+                                admin_msg = (
+                                    f"🚨 <b>ADMIN ALERT: WRONG PAYMENT AMOUNT</b>\n\n"
+                                    f"🆔 Deal ID: <code>{deal_id}</code>\n"
+                                    f"💵 Expected: {expected_amount} USDT\n"
+                                    f"💰 Received: {diff} USDT\n"
+                                    f"👥 Buyer: {deal['buyer']}\n"
+                                    f"👥 Seller: {deal['seller']}\n\n"
+                                    f"🛠️ Action required: Process refund with /emergency {deal_id} WALLET_ADDRESS"
+                                )
+                                
+                                for admin in ADMIN_USERNAMES:
+                                    try:
+                                        bot.send_message(chat_id=GROUP_ID, text=admin_msg, parse_mode='HTML')
+                                        break
+                                    except:
+                                        continue
+                                break
                             
-                            # Notify about cancellation
-                            bot.send_message(
-                                chat_id=GROUP_ID,
-                                text=f"❌ <b>DEAL CANCELLED - INSUFFICIENT AMOUNT</b>\n\n"
-                                     f"🆔 Deal ID: <code>{deal_id}</code>\n"
-                                     f"💵 Expected: {expected_amount} USDT\n"
-                                     f"💰 Received: {diff} USDT\n"
-                                     f"⚠️ Insufficient payment detected\n\n"
-                                     f"🛠️ <b>ADMIN INTERVENTION REQUIRED</b>\n"
-                                     f"📞 Deal cancelled, waiting for admin to handle refund\n"
-                                     f"👥 Participants: {deal['buyer']} ↔️ {deal['seller']}\n\n"
-                                     f"🔔 Admins will process the refund manually",
-                                parse_mode='HTML'
-                            )
-                            
-                            # Notify admins specifically
-                            admin_msg = (
-                                f"🚨 <b>ADMIN ALERT: INSUFFICIENT PAYMENT</b>\n\n"
-                                f"🆔 Deal ID: <code>{deal_id}</code>\n"
-                                f"💵 Expected: {expected_amount} USDT\n"
-                                f"💰 Received: {diff} USDT\n"
-                                f"👥 Buyer: {deal['buyer']}\n"
-                                f"👥 Seller: {deal['seller']}\n\n"
-                                f"🛠️ Action required: Process refund with /emergency {deal_id} WALLET_ADDRESS"
-                            )
-                            
-                            for admin in ADMIN_USERNAMES:
-                                try:
-                                    bot.send_message(chat_id=GROUP_ID, text=admin_msg, parse_mode='HTML')
-                                    break
-                                except:
-                                    continue
-                            break
+                            elif diff < expected_amount:
+                                print(f"⚠️ Underpayment detected for deal {deal_id}: Received {diff}, Expected {expected_amount}")
+                                
+                                # Cancel deal due to wrong amount
+                                db[deal_id]["status"] = "cancelled_wrong_amount"
+                                db[deal_id]["received_amount"] = diff
+                                save_db(db)
+                                
+                                # Notify about cancellation
+                                bot.send_message(
+                                    chat_id=GROUP_ID,
+                                    text=f"❌ <b>DEAL CANCELLED - INSUFFICIENT AMOUNT</b>\n\n"
+                                         f"🆔 Deal ID: <code>{deal_id}</code>\n"
+                                         f"💵 Expected: {expected_amount} USDT\n"
+                                         f"💰 Received: {diff} USDT\n"
+                                         f"⚠️ Insufficient payment detected\n\n"
+                                         f"🛠️ <b>ADMIN INTERVENTION REQUIRED</b>\n"
+                                         f"📞 Deal cancelled, waiting for admin to handle refund\n"
+                                         f"👥 Participants: {deal['buyer']} ↔️ {deal['seller']}\n\n"
+                                         f"🔔 Admins will process the refund manually",
+                                    parse_mode='HTML'
+                                )
+                                
+                                # Notify admins specifically
+                                admin_msg = (
+                                    f"🚨 <b>ADMIN ALERT: INSUFFICIENT PAYMENT</b>\n\n"
+                                    f"🆔 Deal ID: <code>{deal_id}</code>\n"
+                                    f"💵 Expected: {expected_amount} USDT\n"
+                                    f"💰 Received: {diff} USDT\n"
+                                    f"👥 Buyer: {deal['buyer']}\n"
+                                    f"👥 Seller: {deal['seller']}\n\n"
+                                    f"🛠️ Action required: Process refund with /emergency {deal_id} WALLET_ADDRESS"
+                                )
+                                
+                                for admin in ADMIN_USERNAMES:
+                                    try:
+                                        bot.send_message(chat_id=GROUP_ID, text=admin_msg, parse_mode='HTML')
+                                        break
+                                    except:
+                                        continue
+                                break
                 
                 # Update balance tracker
                 last_balance = new_balance

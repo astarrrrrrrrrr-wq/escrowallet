@@ -58,6 +58,13 @@ Preferred communication style: Simple, everyday language.
 
 ## Recent Changes
 
+### July 30, 2025 - Critical Indentation Error Fix
+- **Issue**: IndentationError in payment monitoring function preventing app startup
+- **Root Cause**: Code after `if deal["status"] == "waiting_usdt_deposit":` was incorrectly indented
+- **Solution**: Fixed proper indentation for all code blocks within the conditional statement
+- **Result**: App now starts successfully with all systems operational
+- **Status**: ✅ Bot running, Web3 connected, payment monitoring active
+
 ### July 26, 2025 - Critical Bug Fix: MATIC Balance Issue Resolution
 - **Root Cause Identified**: Escrow wallet had 0 MATIC balance, preventing USDT withdrawals
 - **Error Symptom**: Users receiving "INTERNAL_ERROR: insufficient funds" when trying to withdraw
