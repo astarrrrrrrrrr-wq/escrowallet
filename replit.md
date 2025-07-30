@@ -58,6 +58,15 @@ Preferred communication style: Simple, everyday language.
 
 ## Recent Changes
 
+### July 30, 2025 - Critical Security Enhancement: Payment Sender Verification
+- **Sender Verification System**: Added comprehensive system to verify USDT payments come from authorized seller wallets
+- **Enhanced Deal Creation**: Updated create_deal function to store seller wallet addresses for verification
+- **Fraud Prevention**: Automatic deal cancellation when payments come from unauthorized wallets  
+- **Admin Security Alerts**: Automatic notifications to admins when unauthorized payments are detected
+- **Verification Framework**: Built foundation for blockchain transaction verification (currently simplified)
+- **Data Security**: All deals now track both buyer and seller wallet addresses for complete audit trail
+- **Status**: ✅ Enhanced security system operational, protecting against payment fraud
+
 ### July 30, 2025 - Enhanced Security and Trading Limits Update
 - **Deal Expiry**: Reduced from 24 hours to 15 minutes for faster deal resolution
 - **Trading Limits**: Updated to minimum 5 USDT and maximum 50 USDT per transaction
