@@ -4,19 +4,43 @@
     "seller": "@Indianarmy_1947",
     "amount": 1.0,
     "buyer_wallet": "0x75B6B1A908C8067Ab8925aC8C976A026d8E7088D",
-    "status": "buyer_paid",
+    "status": "completed",
     "buyer_confirmed": true,
     "seller_confirmed": true,
-    "created": 1753541086.5948224
+    "created": 1753541086.5948224,
+    "tx_hash": "0xae258a3a3798a2400ea13e2b04b1a573a18181252c4e3ad3970112fadbdfc700"
   },
   "1753541816": {
     "buyer": "@ASTARR000",
     "seller": "@Babuva_king",
     "amount": 0.1,
     "buyer_wallet": "0x75B6B1A908C8067Ab8925aC8C976A026d8E7088D",
-    "status": "waiting_usdt_deposit",
-    "buyer_confirmed": false,
-    "seller_confirmed": false,
-    "created": 1753541816.7133656
+    "status": "completed",
+    "buyer_confirmed": true,
+    "seller_confirmed": true,
+    "created": 1753541816.7133656,
+    "tx_hash": "0xdf9342574ab89026a755d1417a02cefd68a136af2c99c89aa16b095cccf67595"
+  },
+  "1753549822": {
+    "buyer": "@Indianarmy_1947",
+    "seller": "@ASTARR000",
+    "amount": 0.01,
+    "buyer_wallet": "0xd72F8A521bAac0e521237795ED5a2EB4e0703987",
+    "status": "completed",
+    "buyer_confirmed": true,
+    "seller_confirmed": true,
+    "created": 1753549822.2959454,
+    "tx_hash": "0x3bdc8f1db61e4befa175435e7a81ecd1c307bee829e8627f4dae0043c569eeda"
+  },
+  "1753550474": {
+    "buyer": "@Indianarmy_1947",
+    "seller": "@ASTARR000",
+    "amount": 0.01,
+    "buyer_wallet": "0xd72F8A521bAac0e521237795ED5a2EB4e0703987",
+    "status": "completed",
+    "buyer_confirmed": true,
+    "seller_confirmed": true,
+    "created": 1753550474.49401,
+    "tx_hash": "0x3ed67428d276f0a8f7da5549e22a34f276db50ac06e9a3d878d5030d58236fc1"
   }
 }
