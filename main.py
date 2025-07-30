@@ -9,12 +9,22 @@ from flask import Flask
 import telebot
 
 # === BOT & WALLET CONFIG ===
-BOT_TOKEN = os.getenv("BOT_TOKEN", "7705638552:AAHN7YJ-8fB6l_CMp_L9tbZDfNMdpQj2Fc4")
-ADMIN_USERNAMES = ["Indianarmy_1947", "Threethirty330","@ASTARR000"]
+BOT_TOKEN = os.getenv("BOT_TOKEN")
+if not BOT_TOKEN:
+    raise ValueError("BOT_TOKEN environment variable is required")
+
+ADMIN_USERNAMES = ["Indianarmy_1947", "Threethirty330", "ASTARR000"]  # Fixed: Removed @ symbol for consistency
 GROUP_ID = -1002572686648
 
 ESCROW_WALLET = "0x5a2dD9bFe9cB39F6A1AD806747ce29718b1BfB70"
-PRIVATE_KEY = os.getenv("PRIVATE_KEY", "26ff32efb7b61a3602cc693b77f824427353f20dccbd4497f25322e3c53fdd4b")
+PRIVATE_KEY = os.getenv("PRIVATE_KEY")
+if not PRIVATE_KEY:
+    raise ValueError("PRIVATE_KEY environment variable is required")
+
+# Transaction limits for security
+MIN_TRANSACTION_AMOUNT = 1.0  # Minimum 1 USDT
+MAX_TRANSACTION_AMOUNT = 10000.0  # Maximum 10,000 USDT per deal
+DEAL_EXPIRY_HOURS = 24  # Deals expire after 24 hours
 
 # === POLYGON CONFIG ===
 RPC_URL = "https://polygon-rpc.com"
@@ -175,6 +185,58 @@ def get_matic_balance():
         print(f"⚠️ Error fetching MATIC balance: {e}")
         return 0
 
+def validate_wallet_address(address):
+    """Validate Ethereum wallet address format"""
+    try:
+        if not address or len(address) != 42:
+            return False
+        if not address.startswith('0x'):
+            return False
+        # Check if it's a valid checksum address
+        Web3.to_checksum_address(address)
+        return True
+    except:
+        return False
+
+def validate_transaction_amount(amount):
+    """Validate transaction amount is within allowed limits"""
+    try:
+        amount = float(amount)
+        if amount < MIN_TRANSACTION_AMOUNT:
+            return False, f"Minimum amount is {MIN_TRANSACTION_AMOUNT} USDT"
+        if amount > MAX_TRANSACTION_AMOUNT:
+            return False, f"Maximum amount is {MAX_TRANSACTION_AMOUNT} USDT"
+        return True, "Valid amount"
+    except:
+        return False, "Invalid amount format"
+
+def check_deal_expiry():
+    """Check and clean up expired deals"""
+    db = load_db()
+    current_time = time.time()
+    expired_deals = []
+    
+    for deal_id, deal in db.items():
+        deal_age = current_time - int(deal_id)
+        if deal_age > (DEAL_EXPIRY_HOURS * 3600) and deal["status"] not in ["completed", "cancelled_wrong_amount", "emergency_refunded"]:
+            expired_deals.append(deal_id)
+    
+    # Mark expired deals
+    for deal_id in expired_deals:
+        db[deal_id]["status"] = "expired"
+        save_db(db)
+        
+        # Notify about expired deal
+        bot.send_message(
+            chat_id=GROUP_ID,
+            text=f"⏰ <b>Deal Expired</b>\n\n"
+                 f"🆔 Deal ID: <code>{deal_id}</code>\n"
+                 f"📅 Expired after {DEAL_EXPIRY_HOURS} hours\n"
+                 f"👥 Participants: {db[deal_id]['buyer']} ↔️ {db[deal_id]['seller']}\n\n"
+                 f"🛠️ Admin intervention may be required for refunds",
+            parse_mode='HTML'
+        )
+
 def check_wallet_balances():
     """Check both USDT and MATIC balances and notify if low"""
     usdt_balance = get_usdt_balance()
@@ -273,11 +335,13 @@ def set_wallet(message):
     
     wallet_address = args[0]
     
-    # Basic wallet validation
-    if not wallet_address.startswith('0x') or len(wallet_address) != 42:
+    # Validate wallet address format
+    if not validate_wallet_address(wallet_address):
         bot.reply_to(message, 
             "❌ <b>Invalid Wallet Address</b>\n\n"
-            "Please provide a valid Ethereum/Polygon wallet address starting with 0x", 
+            "🚫 The provided address is not a valid Ethereum address\n"
+            "✅ Address must be 42 characters starting with '0x'\n"
+            "📝 <b>Example:</b> <code>0x742d35Cc6131b24b8e5aC3dc1bF0e9e5F9e8E8F8</code>", 
             parse_mode='HTML'
         )
         return
@@ -373,13 +437,18 @@ def buy_order(message):
         )
         return
     
-    try:
-        amount = float(args[0])
-        if amount <= 0:
-            raise ValueError("Amount must be positive")
-    except ValueError:
-        bot.reply_to(message, "❌ <b>Invalid Amount</b>\n\nPlease enter a valid positive number.", parse_mode='HTML')
+    # Validate transaction amount
+    is_valid, message_text = validate_transaction_amount(args[0])
+    if not is_valid:
+        bot.reply_to(message, 
+            f"❌ <b>Invalid Amount</b>\n\n"
+            f"🚫 {message_text}\n"
+            f"📊 <b>Allowed range:</b> {MIN_TRANSACTION_AMOUNT} - {MAX_TRANSACTION_AMOUNT} USDT", 
+            parse_mode='HTML'
+        )
         return
+    
+    amount = float(args[0])
     
     orders = load_orders()
     order_id = str(int(time.time()))
@@ -537,14 +606,18 @@ def sell_order(message):
         )
         return
     
-    try:
-        amount = float(args[0])
-        if amount <= 0:
-            raise ValueError("Amount must be positive")
-    except ValueError:
-        bot.reply_to(message, "❌ <b>Invalid Amount</b>\n\nPlease enter a valid positive number.", parse_mode='HTML')
+    # Validate transaction amount
+    is_valid, message_text = validate_transaction_amount(args[0])
+    if not is_valid:
+        bot.reply_to(message, 
+            f"❌ <b>Invalid Amount</b>\n\n"
+            f"🚫 {message_text}\n"
+            f"📊 <b>Allowed range:</b> {MIN_TRANSACTION_AMOUNT} - {MAX_TRANSACTION_AMOUNT} USDT", 
+            parse_mode='HTML'
+        )
         return
     
+    amount = float(args[0])
     orders = load_orders()
     order_id = str(int(time.time()))
     
@@ -1708,28 +1781,40 @@ def unknown_command(message):
 def monitor_payments():
     last_balance = get_usdt_balance()
     print(f"🔍 Starting payment monitor with initial balance: {last_balance} USDT")
+    payment_lock = threading.Lock()  # Prevent race conditions
     
     while True:
         try:
-            db = load_db()
-            new_balance = get_usdt_balance()
-            
-            # Check if there's an increase in balance
-            if new_balance > last_balance:
-                diff = new_balance - last_balance
-                print(f"💰 Balance increase detected: +{diff} USDT (Total: {new_balance} USDT)")
+            with payment_lock:  # Ensure atomic operations
+                # Check for expired deals first
+                check_deal_expiry()
                 
-                # Check for deals waiting for USDT deposit
-                for deal_id, deal in db.items():
-                    if deal["status"] == "waiting_usdt_deposit":
+                db = load_db()
+                new_balance = get_usdt_balance()
+                
+                # Check if there's an increase in balance
+                if new_balance > last_balance:
+                    diff = new_balance - last_balance
+                    print(f"💰 Balance increase detected: +{diff} USDT (Total: {new_balance} USDT)")
+                    
+                    # Check for deals waiting for USDT deposit
+                    for deal_id, deal in db.items():
+                        if deal["status"] == "waiting_usdt_deposit":
                         expected_amount = deal["amount"]
                         
-                        # Check if the deposit amount matches exactly
-                        if abs(diff - expected_amount) < 0.0001:  # Allow for tiny rounding differences
+                        # Check if the deposit amount matches exactly (with small tolerance for precision)
+                        if abs(diff - expected_amount) < 0.0001:
                             print(f"✅ Exact match found for deal {deal_id}: {expected_amount} USDT")
+                            
+                            # Check if deal is still valid (not expired)
+                            deal_age = time.time() - int(deal_id)
+                            if deal_age > (DEAL_EXPIRY_HOURS * 3600):
+                                print(f"❌ Deal {deal_id} expired, ignoring payment")
+                                continue
                             
                             # Update deal status
                             db[deal_id]["status"] = "usdt_deposited"
+                            db[deal_id]["deposit_confirmed_at"] = time.time()
                             save_db(db)
                             
                             # Notify about successful deposit and next steps
