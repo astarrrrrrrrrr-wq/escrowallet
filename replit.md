@@ -58,6 +58,14 @@ Preferred communication style: Simple, everyday language.
 
 ## Recent Changes
 
+### July 30, 2025 - Enhanced Security and Trading Limits Update
+- **Deal Expiry**: Reduced from 24 hours to 15 minutes for faster deal resolution
+- **Trading Limits**: Updated to minimum 5 USDT and maximum 50 USDT per transaction
+- **Bot Behavior**: Modified to only respond to specific commands, ignoring unknown messages
+- **Implementation**: Updated all time calculations from hours to minutes throughout the system
+- **Result**: More focused, secure trading environment with tighter controls
+- **Status**: ✅ All changes operational, bot running with enhanced parameters
+
 ### July 30, 2025 - Critical Indentation Error Fix
 - **Issue**: IndentationError in payment monitoring function preventing app startup
 - **Root Cause**: Code after `if deal["status"] == "waiting_usdt_deposit":` was incorrectly indented

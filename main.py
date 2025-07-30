@@ -22,9 +22,9 @@ if not PRIVATE_KEY:
     raise ValueError("PRIVATE_KEY environment variable is required")
 
 # Transaction limits for security
-MIN_TRANSACTION_AMOUNT = 1.0  # Minimum 1 USDT
-MAX_TRANSACTION_AMOUNT = 10000.0  # Maximum 10,000 USDT per deal
-DEAL_EXPIRY_HOURS = 24  # Deals expire after 24 hours
+MIN_TRANSACTION_AMOUNT = 5.0  # Minimum 5 USDT
+MAX_TRANSACTION_AMOUNT = 50.0  # Maximum 50 USDT per deal
+DEAL_EXPIRY_MINUTES = 15  # Deals expire after 15 minutes
 
 # === POLYGON CONFIG ===
 RPC_URL = "https://polygon-rpc.com"
@@ -218,7 +218,7 @@ def check_deal_expiry():
     
     for deal_id, deal in db.items():
         deal_age = current_time - int(deal_id)
-        if deal_age > (DEAL_EXPIRY_HOURS * 3600) and deal["status"] not in ["completed", "cancelled_wrong_amount", "emergency_refunded"]:
+        if deal_age > (DEAL_EXPIRY_MINUTES * 60) and deal["status"] not in ["completed", "cancelled_wrong_amount", "emergency_refunded"]:
             expired_deals.append(deal_id)
     
     # Mark expired deals
@@ -231,7 +231,7 @@ def check_deal_expiry():
             chat_id=GROUP_ID,
             text=f"⏰ <b>Deal Expired</b>\n\n"
                  f"🆔 Deal ID: <code>{deal_id}</code>\n"
-                 f"📅 Expired after {DEAL_EXPIRY_HOURS} hours\n"
+                 f"📅 Expired after {DEAL_EXPIRY_MINUTES} minutes\n"
                  f"👥 Participants: {db[deal_id]['buyer']} ↔️ {db[deal_id]['seller']}\n\n"
                  f"🛠️ Admin intervention may be required for refunds",
             parse_mode='HTML'
@@ -1754,28 +1754,8 @@ def stats_command(message):
     
     bot.reply_to(message, stats_msg, parse_mode='HTML')
 
-# Add a catch-all handler for unknown commands
-@bot.message_handler(func=lambda message: message.text.startswith('/'))
-def unknown_command(message):
-    unknown_msg = (
-        "❓ <b>Unknown Command</b>\n\n"
-        "📋 <b>Available Commands:</b>\n"
-        "🤝 /deal - Start new escrow\n"
-        "✅ /confirm - Confirm completion\n"
-        "💰 /balance - Check balance\n"
-        "📊 /status - Deal status\n"
-        "📝 /list - Your deals\n"
-        "💡 /help - Detailed help\n"
-        "ℹ️ /info - Bot information\n"
-        "📊 /stats - Bot statistics\n\n"
-        "🔒 <b>Admin Commands:</b>\n"
-        "🚫 /scammer - Mark scammer\n"
-        "🗂️ /deals - All deals\n"
-        "🚨 /emergency - Emergency refund\n"
-        "📝 /blacklist - View blacklist\n\n"
-        "💬 Need help? Use /help for detailed instructions!"
-    )
-    bot.reply_to(message, unknown_msg, parse_mode='HTML')
+# Bot will only respond to specific commands defined above
+# No catch-all handler for unknown commands - bot ignores unrecognized messages
 
 # === ENHANCED PAYMENT MONITORING ===
 def monitor_payments():
@@ -1808,7 +1788,7 @@ def monitor_payments():
                                 
                                 # Check if deal is still valid (not expired)
                                 deal_age = time.time() - int(deal_id)
-                                if deal_age > (DEAL_EXPIRY_HOURS * 3600):
+                                if deal_age > (DEAL_EXPIRY_MINUTES * 60):
                                     print(f"❌ Deal {deal_id} expired, ignoring payment")
                                     continue
                                 
