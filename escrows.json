@@ -42,5 +42,17 @@
     "seller_confirmed": true,
     "created": 1753550474.49401,
     "tx_hash": "0x3ed67428d276f0a8f7da5549e22a34f276db50ac06e9a3d878d5030d58236fc1"
+  },
+  "1753872760": {
+    "buyer": "@testbuyer",
+    "seller": "@testseller",
+    "amount": 25.0,
+    "buyer_wallet": "0x1234567890123456789012345678901234567890",
+    "seller_wallet": "0xabcdefabcdefabcdefabcdefabcdefabcdefabcd",
+    "status": "cancelled_wrong_amount",
+    "buyer_confirmed": false,
+    "seller_confirmed": false,
+    "created": 1753871760.306758,
+    "received_amount": 0.0004
   }
 }
