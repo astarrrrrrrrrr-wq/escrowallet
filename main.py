@@ -14,7 +14,7 @@ if not BOT_TOKEN:
     raise ValueError("BOT_TOKEN environment variable is required")
 
 ADMIN_USERNAMES = ["Indianarmy_1947", "Threethirty330", "ASTARR000"]  # Fixed: Removed @ symbol for consistency
-GROUP_ID = -1002572686648
+GROUP_ID = -4986666475
 
 ESCROW_WALLET = "0x5a2dD9bFe9cB39F6A1AD806747ce29718b1BfB70"
 PRIVATE_KEY = os.getenv("PRIVATE_KEY")
@@ -22,7 +22,7 @@ if not PRIVATE_KEY:
     raise ValueError("PRIVATE_KEY environment variable is required")
 
 # Transaction limits for security
-MIN_TRANSACTION_AMOUNT = 5.0  # Minimum 5 USDT
+MIN_TRANSACTION_AMOUNT = 0.05  # Minimum 5 USDT
 MAX_TRANSACTION_AMOUNT = 50.0  # Maximum 50 USDT per deal
 DEAL_EXPIRY_MINUTES = 15  # Deals expire after 15 minutes
 
