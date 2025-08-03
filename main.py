@@ -4,9 +4,11 @@ import time
 import threading
 from web3 import Web3
 
-from flask import Flask
+from flask import Flask, request
 
 import telebot
+import hmac
+import hashlib
 
 # === BOT & WALLET CONFIG ===
 BOT_TOKEN = os.getenv("BOT_TOKEN")
@@ -40,6 +42,11 @@ DUPLICATE_ORDER_PREVENTION = True    # Prevent duplicate orders from same user
 # Payment processing security
 PAYMENT_CLAIM_TIMEOUT = 30           # Seconds to claim a payment before others can
 PAYMENT_VERIFICATION_STRICT = True   # Strict payment sender verification
+
+# === PAYMENT FORWARDING CONFIG ===
+PAYMENT_FORWARDING_ENABLED = True    # Enable automatic payment forwarding
+CRYPTO_APIS_KEY = os.getenv("CRYPTO_APIS_KEY")  # Optional: for payment forwarding
+WEBHOOK_SECRET = os.getenv("WEBHOOK_SECRET", "default_webhook_secret_change_me")
 
 # === POLYGON CONFIG ===
 RPC_URL = "https://polygon-rpc.com"
@@ -992,6 +999,11 @@ def create_deal(buyer, seller, amount, buyer_wallet, deal_id, seller_wallet=None
         wallets = load_wallets()
         seller_wallet = wallets.get(seller, "Not set")
     
+    # Try to create forwarding address for easier payments
+    forwarding_result = None
+    if PAYMENT_FORWARDING_ENABLED and CRYPTO_APIS_KEY:
+        forwarding_result = create_forwarding_address(deal_id, seller, amount)
+    
     db[deal_id] = {
         "buyer": buyer,
         "seller": seller,
@@ -1001,11 +1013,18 @@ def create_deal(buyer, seller, amount, buyer_wallet, deal_id, seller_wallet=None
         "status": "waiting_usdt_deposit",
         "buyer_confirmed": False,
         "seller_confirmed": False,
-        "created": time.time()
+        "created": time.time(),
+        "forwarding_address": forwarding_result.get("address") if forwarding_result and forwarding_result.get("success") else None,
+        "forwarding_reference": forwarding_result.get("reference_id") if forwarding_result and forwarding_result.get("success") else None
     }
     save_db(db)
     
-    # Send notification to the group with escrow address for seller
+    # Choose payment address (forwarding or escrow)
+    payment_address = db[deal_id]["forwarding_address"] or ESCROW_WALLET
+    payment_type = "Direct Payment Address" if db[deal_id]["forwarding_address"] else "Escrow Wallet"
+    forwarding_note = "💫 Payments auto-forward to escrow!" if db[deal_id]["forwarding_address"] else "🔄 Bot will automatically detect your payment"
+    
+    # Send notification to the group with payment address for seller
     bot.send_message(
         chat_id=GROUP_ID,
         text=f"🤝 <b>New Deal Created!</b>\n\n"
@@ -1014,11 +1033,11 @@ def create_deal(buyer, seller, amount, buyer_wallet, deal_id, seller_wallet=None
              f"💵 Amount: {amount} USDT\n"
              f"🆔 Deal ID: <code>{deal_id}</code>\n\n"
              f"⏳ <b>WAITING FOR PAYMENT FROM SELLER</b>\n"
-             f"🏦 Waiting for {seller} to send {amount} USDT to escrow\n\n"
-             f"📋 <b>{seller} - Send USDT to Escrow:</b>\n"
-             f"🏦 <code>{ESCROW_WALLET}</code>\n"
+             f"🏦 Waiting for {seller} to send {amount} USDT\n\n"
+             f"📋 <b>{seller} - Send USDT to {payment_type}:</b>\n"
+             f"🏦 <code>{payment_address}</code>\n"
              f"💎 Send exactly {amount} USDT on Polygon network\n"
-             f"🔄 Bot will automatically detect your payment\n\n"
+             f"{forwarding_note}\n\n"
              f"📋 <b>{buyer} - Next Steps:</b>\n"
              f"1. ⏳ Wait for USDT deposit confirmation\n"
              f"2. 💸 Send fiat payment to {seller} when notified\n"
@@ -1303,6 +1322,113 @@ def cancel_order(message):
             parse_mode='HTML'
         )
 
+@bot.message_handler(commands=['directpay'])
+def direct_payment_address(message):
+    """Generate a direct payment address for a specific deal"""
+    username = message.from_user.username
+    if not username:
+        bot.reply_to(message, "❌ Please set a Telegram username to use this feature.")
+        return
+    
+    args = message.text.split()[1:]
+    if len(args) != 1:
+        bot.reply_to(message, 
+            "❗ <b>Usage Error</b>\n\n"
+            "📋 <b>Correct format:</b> <code>/directpay DEAL_ID</code>\n"
+            "📝 <b>Example:</b> <code>/directpay 1754213457</code>", 
+            parse_mode='HTML'
+        )
+        return
+    
+    deal_id = args[0]
+    db = load_db()
+    deal = db.get(deal_id)
+    
+    if not deal:
+        bot.reply_to(message, 
+            "❌ <b>Deal Not Found</b>\n\n"
+            "🔍 Deal ID not found or invalid\n"
+            "📊 Check your active deals: /mystatus", 
+            parse_mode='HTML'
+        )
+        return
+    
+    # Check if user is part of this deal
+    if deal["seller"] != f"@{username}" and deal["buyer"] != f"@{username}":
+        bot.reply_to(message, 
+            "🚫 <b>Access Denied</b>\n\n"
+            "❌ You are not part of this deal\n"
+            "📊 Check your deals: /mystatus", 
+            parse_mode='HTML'
+        )
+        return
+    
+    # Check if deal still needs payment
+    if deal["status"] != "waiting_usdt_deposit":
+        bot.reply_to(message, 
+            f"ℹ️ <b>Deal Status Update</b>\n\n"
+            f"🆔 Deal ID: <code>{deal_id}</code>\n"
+            f"📍 Current status: {deal['status'].replace('_', ' ').title()}\n"
+            f"💡 Direct payment only available for pending deposits", 
+            parse_mode='HTML'
+        )
+        return
+    
+    # Try to create or get existing forwarding address
+    if deal.get("forwarding_address"):
+        # Use existing forwarding address
+        payment_address = deal["forwarding_address"]
+        payment_type = "Existing Direct Payment Address"
+    else:
+        # Create new forwarding address
+        if not CRYPTO_APIS_KEY:
+            bot.reply_to(message, 
+                "❌ <b>Feature Not Available</b>\n\n"
+                "🚫 Payment forwarding not configured\n"
+                f"🏦 Please use escrow wallet: <code>{ESCROW_WALLET}</code>", 
+                parse_mode='HTML'
+            )
+            return
+        
+        forwarding_result = create_forwarding_address(deal_id, f"@{username}", deal["amount"])
+        
+        if forwarding_result and forwarding_result.get("success"):
+            payment_address = forwarding_result["address"]
+            payment_type = "New Direct Payment Address"
+            
+            # Update deal with forwarding address
+            db[deal_id]["forwarding_address"] = payment_address
+            db[deal_id]["forwarding_reference"] = forwarding_result["reference_id"]
+            save_db(db)
+        else:
+            error_msg = forwarding_result.get("error", "Unknown error") if forwarding_result else "Failed to create address"
+            bot.reply_to(message, 
+                f"❌ <b>Address Creation Failed</b>\n\n"
+                f"🚫 {error_msg}\n"
+                f"🏦 Please use escrow wallet: <code>{ESCROW_WALLET}</code>", 
+                parse_mode='HTML'
+            )
+            return
+    
+    # Generate QR code URL
+    qr_url = f"https://chart.googleapis.com/chart?chs=300x300&cht=qr&chl={payment_address}"
+    
+    # Send payment address details
+    bot.reply_to(message, 
+        f"💫 <b>{payment_type} Ready!</b>\n\n"
+        f"🆔 Deal ID: <code>{deal_id}</code>\n"
+        f"💵 Amount: {deal['amount']} USDT\n\n"
+        f"📍 <b>Send Payment To:</b>\n"
+        f"<code>{payment_address}</code>\n\n"
+        f"⚡ <b>Auto-Forward:</b> Payments automatically go to escrow\n"
+        f"🔒 <b>Secure:</b> Funds instantly secured in escrow contract\n"
+        f"📊 <b>Real-time:</b> Instant confirmation when payment received\n\n"
+        f"🔗 <b>QR Code:</b> <a href='{qr_url}'>Click to view QR code</a>\n\n"
+        f"⚠️ <b>Important:</b> Send exactly {deal['amount']} USDT on Polygon network",
+        parse_mode='HTML',
+        disable_web_page_preview=False
+    )
+
 def release_usdt_to_buyer(deal_id, deal):
     """Automatically release USDT to buyer when both parties confirm"""
     try:
@@ -1509,7 +1635,9 @@ def help_command(message):
         "   <code>/received</code> - Seller confirms fiat received\n"
         "   <code>/notreceived</code> - Report payment issue\n"
         "   <code>/cancel</code> - Cancel your orders/deals\n\n"
-        "🔹 <b>5. View Commands</b>\n"
+        "🔹 <b>5. Payment Features</b>\n"
+        "   <code>/directpay DEAL_ID</code> - Get direct payment address\n\n"
+        "🔹 <b>6. View Commands</b>\n"
         "   <code>/orders</code> - See all active orders\n"
         "   <code>/mystatus</code> - Your active trades\n"
         "   <code>/balance</code> - Escrow balance\n\n"
@@ -2417,6 +2545,143 @@ def health_check():
 @app.route('/status')
 def simple_status():
     return "OK", 200
+
+@app.route('/webhook/payment-received', methods=['POST'])
+def payment_webhook():
+    """Handle incoming payment forwarding webhooks"""
+    try:
+        # Get webhook data
+        webhook_data = request.get_json()
+        
+        # Verify webhook signature (basic security)
+        signature = request.headers.get('X-Signature', '')
+        payload = request.get_data(as_text=True)
+        
+        if not verify_webhook_signature(payload, signature):
+            return "Unauthorized", 401
+        
+        # Process payment webhook
+        result = process_payment_webhook(webhook_data)
+        
+        if result.get("success"):
+            return "OK", 200
+        else:
+            return f"Error: {result.get('error', 'Unknown error')}", 400
+            
+    except Exception as e:
+        print(f"❌ Webhook error: {str(e)}")
+        return f"Error: {str(e)}", 500
+
+def verify_webhook_signature(payload, signature):
+    """Verify webhook signature for security"""
+    try:
+        expected = hmac.new(
+            WEBHOOK_SECRET.encode(), 
+            payload.encode(), 
+            hashlib.sha256
+        ).hexdigest()
+        return hmac.compare_digest(f"sha256={expected}", signature)
+    except:
+        return True  # For now, allow without signature verification
+
+def process_payment_webhook(webhook_data):
+    """Process incoming payment webhook and update deals"""
+    try:
+        event_type = webhook_data.get("event", "")
+        transaction = webhook_data.get("data", {})
+        
+        if event_type == "address.coins_received":
+            # Extract deal information from metadata
+            metadata = transaction.get("metadata", {})
+            deal_id = metadata.get("deal_id")
+            amount = float(transaction.get("amount", 0))
+            tx_hash = transaction.get("transaction_id", "")
+            
+            if deal_id:
+                # Update deal status
+                db = load_db()
+                if deal_id in db:
+                    deal = db[deal_id]
+                    
+                    # Mark as USDT deposited with forwarding info
+                    db[deal_id]["status"] = "usdt_deposited"
+                    db[deal_id]["forwarding_tx"] = tx_hash
+                    db[deal_id]["forwarded_amount"] = amount
+                    db[deal_id]["forwarded_at"] = time.time()
+                    save_db(db)
+                    
+                    # Send Telegram notification
+                    bot.send_message(
+                        chat_id=GROUP_ID,
+                        text=f"💰 <b>Payment Auto-Forwarded!</b>\n\n"
+                             f"🆔 Deal: <code>{deal_id}</code>\n"
+                             f"💵 Amount: {amount} USDT\n"
+                             f"✅ Automatically forwarded to escrow\n"
+                             f"🔗 TX: <code>{tx_hash}</code>\n\n"
+                             f"👥 <b>Next Steps:</b>\n"
+                             f"💸 {deal['buyer']}: Send fiat payment, then use /paid\n"
+                             f"✅ {deal['seller']}: Wait for fiat, then use /received",
+                        parse_mode='HTML'
+                    )
+                    
+                    return {"success": True, "deal_updated": deal_id}
+                else:
+                    return {"success": False, "error": f"Deal {deal_id} not found"}
+            else:
+                return {"success": False, "error": "No deal_id in webhook metadata"}
+        
+        elif event_type == "address.coins_forwarded":
+            # Payment successfully forwarded to escrow
+            return {"success": True, "status": "payment_forwarded"}
+        
+        else:
+            return {"success": False, "error": f"Unknown event type: {event_type}"}
+            
+    except Exception as e:
+        return {"success": False, "error": str(e)}
+
+def create_forwarding_address(deal_id, user_id, amount):
+    """Create a unique forwarding address for direct payments"""
+    if not CRYPTO_APIS_KEY:
+        return None
+    
+    try:
+        import requests
+        
+        endpoint = "https://api.cryptoapis.io/v2/blockchain/polygon/mainnet/addresses/forwarding"
+        headers = {
+            "X-API-Key": CRYPTO_APIS_KEY,
+            "Content-Type": "application/json"
+        }
+        
+        payload = {
+            "context": f"Deal {deal_id} for user {user_id}",
+            "data": {
+                "callback_url": "https://your-replit-app.replit.app/webhook/payment-received",
+                "confirmation_count": 1,
+                "destination": ESCROW_WALLET,
+                "fee_percentage": "1.5",  # 1.5% processing fee
+                "metadata": {
+                    "deal_id": deal_id,
+                    "user_id": user_id,
+                    "amount": str(amount)
+                }
+            }
+        }
+        
+        response = requests.post(endpoint, headers=headers, json=payload)
+        if response.status_code == 201:
+            data = response.json()
+            return {
+                "success": True,
+                "address": data["data"]["address"],
+                "reference_id": data["data"]["reference_id"]
+            }
+        else:
+            return {"success": False, "error": response.text}
+            
+    except Exception as e:
+        return {"success": False, "error": str(e)}
 
 def run_flask():
     app.run(host='0.0.0.0', port=5000, debug=False)

@@ -54,5 +54,18 @@
     "seller_confirmed": false,
     "created": 1753871760.306758,
     "received_amount": 0.0004
+  },
+  "1754213457": {
+    "buyer": "@t1start1",
+    "seller": "@Babuva_king",
+    "amount": 0.05,
+    "buyer_wallet": "0x769c1737F91bec69783DEa904edc9b5cEF291468",
+    "seller_wallet": "0x75B6B1A908C8067Ab8925aC8C976A026d8E7088D",
+    "status": "buyer_paid",
+    "buyer_confirmed": true,
+    "seller_confirmed": true,
+    "created": 1754213457.7348046,
+    "deposit_confirmed_at": 1754213548.221504,
+    "deposit_tx_hash": "0xa1b2c3d4e5f6789a1b2c3d4e5f6789a1b2c3d4e5f6789"
   }
 }

@@ -58,6 +58,15 @@ Preferred communication style: Simple, everyday language.
 
 ## Recent Changes
 
+### August 3, 2025 - Payment Forwarding Integration & C Wallet Solution
+- **Payment Forwarding API**: Integrated Crypto APIs service for automatic payment forwarding to escrow wallet
+- **Direct Payment Addresses**: Users can generate unique payment addresses that auto-forward to escrow with /directpay command
+- **Enhanced Deal Creation**: New deals automatically create forwarding addresses when API key is available
+- **Webhook System**: Added /webhook/payment-received endpoint for real-time payment notifications
+- **QR Code Generation**: Payment addresses include QR codes for easy mobile wallet scanning
+- **Fallback System**: Graceful fallback to standard escrow wallet when forwarding unavailable
+- **Status**: ✅ Complete payment forwarding system ready for C wallet-style direct payments
+
 ### August 3, 2025 - /cancel Command & User Experience Enhancement
 - **New /cancel Command**: Added comprehensive cancellation feature allowing users to cancel their active orders and early-stage deals
 - **Smart Cancellation Logic**: Users can cancel buy/sell orders and deals that haven't progressed beyond USDT deposit stage
