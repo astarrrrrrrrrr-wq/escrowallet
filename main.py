@@ -254,7 +254,7 @@ def validate_transaction_amount(amount):
         return False, "Invalid amount format"
 
 def check_deal_expiry():
-    """Check and clean up expired deals"""
+    """Check and delete expired deals immediately"""
     db = load_db()
     current_time = time.time()
     expired_deals = []
@@ -264,19 +264,21 @@ def check_deal_expiry():
         if deal_age > (DEAL_EXPIRY_MINUTES * 60) and deal["status"] not in ["completed", "cancelled_wrong_amount", "emergency_refunded"]:
             expired_deals.append(deal_id)
     
-    # Mark expired deals
+    # Delete expired deals immediately
     for deal_id in expired_deals:
-        db[deal_id]["status"] = "expired"
+        deal_info = db[deal_id]  # Store deal info before deletion
+        del db[deal_id]  # Delete the deal immediately
         save_db(db)
         
-        # Notify about expired deal
+        # Notify about expired and deleted deal
         bot.send_message(
             chat_id=GROUP_ID,
-            text=f"⏰ <b>Deal Expired</b>\n\n"
+            text=f"⏰ <b>Deal Expired & Deleted</b>\n\n"
                  f"🆔 Deal ID: <code>{deal_id}</code>\n"
                  f"📅 Expired after {DEAL_EXPIRY_MINUTES} minutes\n"
-                 f"👥 Participants: {db[deal_id]['buyer']} ↔️ {db[deal_id]['seller']}\n\n"
-                 f"🛠️ Admin intervention may be required for refunds",
+                 f"👥 Participants: {deal_info['buyer']} ↔️ {deal_info['seller']}\n"
+                 f"💰 Amount: {deal_info['amount']} USDT\n\n"
+                 f"🗑️ Deal has been automatically deleted from the system",
             parse_mode='HTML'
         )
 

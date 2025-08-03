@@ -58,6 +58,13 @@ Preferred communication style: Simple, everyday language.
 
 ## Recent Changes
 
+### August 3, 2025 - Enhanced Deal Expiry Management
+- **Immediate Deal Deletion**: Updated `check_deal_expiry()` function to delete expired deals immediately instead of marking them as expired
+- **Automatic Cleanup**: Deals are now completely removed from the system after 15 minutes with no admin intervention needed
+- **Enhanced Notifications**: Updated expiry messages to indicate deals have been deleted, not just expired
+- **System Efficiency**: Reduces database bloat by removing old deals automatically
+- **Status**: ✅ Enhanced expiry management operational, expired deals deleted immediately
+
 ### July 30, 2025 - Critical Security Enhancement: Payment Sender Verification
 - **Sender Verification System**: Added comprehensive system to verify USDT payments come from authorized seller wallets
 - **Enhanced Deal Creation**: Updated create_deal function to store seller wallet addresses for verification
