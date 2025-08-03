@@ -1100,6 +1100,20 @@ def confirm_paid(message):
         )
         return
     
+    # CHECK: USDT must be deposited before buyer can confirm fiat payment
+    if user_deal["status"] != "usdt_deposited":
+        bot.reply_to(message, 
+            f"⚠️ <b>Cannot Confirm Payment Yet</b>\n\n"
+            f"🆔 Deal ID: <code>{deal_id}</code>\n"
+            f"📍 Current Status: {user_deal['status'].replace('_', ' ').title()}\n\n"
+            f"❌ <b>USDT not yet deposited to escrow!</b>\n"
+            f"⏳ Wait for {user_deal['seller']} to send {user_deal['amount']} USDT first\n"
+            f"🏦 Only confirm fiat payment AFTER USDT is secured in escrow\n\n"
+            f"🛡️ <b>Security:</b> This prevents premature fiat payments", 
+            parse_mode='HTML'
+        )
+        return
+    
     # Mark buyer as confirmed payment sent
     db[deal_id]["buyer_confirmed"] = True
     db[deal_id]["status"] = "buyer_paid"
@@ -1148,6 +1162,20 @@ def confirm_received(message):
         bot.reply_to(message, 
             "❌ <b>No Active Deal Found</b>\n\n"
             "You don't have any active deals where you're the seller.", 
+            parse_mode='HTML'
+        )
+        return
+    
+    # CHECK: USDT must be deposited before seller can confirm fiat receipt
+    if user_deal["status"] not in ["usdt_deposited", "buyer_paid"]:
+        bot.reply_to(message, 
+            f"⚠️ <b>Cannot Confirm Receipt Yet</b>\n\n"
+            f"🆔 Deal ID: <code>{deal_id}</code>\n"
+            f"📍 Current Status: {user_deal['status'].replace('_', ' ').title()}\n\n"
+            f"❌ <b>USDT not yet deposited to escrow!</b>\n"
+            f"💰 You must send {user_deal['amount']} USDT to escrow first\n"
+            f"🏦 Escrow Address: <code>{ESCROW_WALLET}</code>\n\n"
+            f"🛡️ <b>Security:</b> USDT must be secured before confirming fiat receipt", 
             parse_mode='HTML'
         )
         return
@@ -1202,6 +1230,20 @@ def payment_not_received(message):
         bot.reply_to(message, 
             "❌ <b>No Active Deal Found</b>\n\n"
             "You don't have any active deals where you're the seller.", 
+            parse_mode='HTML'
+        )
+        return
+    
+    # CHECK: Can only dispute if USDT is deposited and buyer claimed to pay
+    if user_deal["status"] not in ["buyer_paid", "usdt_deposited"]:
+        bot.reply_to(message, 
+            f"⚠️ <b>Cannot Report Non-Payment Yet</b>\n\n"
+            f"🆔 Deal ID: <code>{deal_id}</code>\n"
+            f"📍 Current Status: {user_deal['status'].replace('_', ' ').title()}\n\n"
+            f"ℹ️ You can only report non-payment after:\n"
+            f"1. ✅ USDT is deposited to escrow\n"
+            f"2. ❌ Buyer claims to have sent fiat but you didn't receive it\n\n"
+            f"🛡️ <b>Current Issue:</b> Complete USDT deposit first", 
             parse_mode='HTML'
         )
         return
