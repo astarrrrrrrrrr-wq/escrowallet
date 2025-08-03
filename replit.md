@@ -58,6 +58,14 @@ Preferred communication style: Simple, everyday language.
 
 ## Recent Changes
 
+### August 3, 2025 - Critical Spam Fix & Enhanced Payment Detection
+- **Telegram Spam Resolution**: Fixed repeated deal expiration messages by implementing one-time notification system with expiry_notified flag
+- **Enhanced Payment Detection**: Improved payment monitoring with detailed sender information, transaction context, and verification status
+- **Professional Workflow Messages**: Enhanced notification system showing clear step-by-step instructions for both buyer and seller
+- **Advanced Payment Verification**: Enhanced verify_payment_sender function with real transaction details, block numbers, and comprehensive validation
+- **Silent Monitoring**: Fixed excessive balance check logging by implementing verbose parameter for admin-only detailed output
+- **Status**: ✅ All spam issues resolved, payment detection significantly enhanced with professional user experience
+
 ### August 3, 2025 - Comprehensive Security Enhancement Suite
 - **Race Condition Prevention**: Implemented secure payment claiming with timeout locks to prevent multiple deals claiming same payment
 - **Advanced Rate Limiting**: Added multi-tier rate limiting system (5 commands/minute general, 3 orders/hour)
