@@ -58,6 +58,17 @@ Preferred communication style: Simple, everyday language.
 
 ## Recent Changes
 
+### August 3, 2025 - Comprehensive Security Enhancement Suite
+- **Race Condition Prevention**: Implemented secure payment claiming with timeout locks to prevent multiple deals claiming same payment
+- **Advanced Rate Limiting**: Added multi-tier rate limiting system (5 commands/minute general, 3 orders/hour)
+- **Duplicate Order Prevention**: Prevents users from creating multiple identical buy/sell orders
+- **Payment Processing Lock**: Enhanced payment monitoring with RLock to ensure atomic operations
+- **Anti-Spam Infrastructure**: Comprehensive command tracking and automatic cleanup of old security data
+- **Enhanced Fraud Detection**: Strengthened wallet verification and payment sender authentication
+- **Security Data Persistence**: Added security_data.json for tracking user behavior patterns
+- **Command Cooldowns**: Implemented cooldown periods between expensive operations
+- **Status**: ✅ Complete security overhaul operational, protecting against all identified vulnerabilities
+
 ### August 3, 2025 - Enhanced Deal Expiry Management
 - **Immediate Deal Deletion**: Updated `check_deal_expiry()` function to delete expired deals immediately instead of marking them as expired
 - **Automatic Cleanup**: Deals are now completely removed from the system after 15 minutes with no admin intervention needed

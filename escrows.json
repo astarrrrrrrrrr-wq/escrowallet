@@ -54,16 +54,5 @@
     "seller_confirmed": false,
     "created": 1753871760.306758,
     "received_amount": 0.0004
-  },
-  "1753875229": {
-    "buyer": "@Babuva_king",
-    "seller": "@ASTARR000",
-    "amount": 0.05,
-    "buyer_wallet": "0x75B6B1A908C8067Ab8925aC8C976A026d8E7088D",
-    "seller_wallet": "Not set",
-    "status": "expired",
-    "buyer_confirmed": false,
-    "seller_confirmed": false,
-    "created": 1753875229.507505
   }
 }

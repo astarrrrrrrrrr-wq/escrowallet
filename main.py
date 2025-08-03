@@ -26,6 +26,21 @@ MIN_TRANSACTION_AMOUNT = 0.05  # Minimum 5 USDT
 MAX_TRANSACTION_AMOUNT = 50.0  # Maximum 50 USDT per deal
 DEAL_EXPIRY_MINUTES = 15  # Deals expire after 15 minutes
 
+# === ENHANCED SECURITY CONFIG ===
+# Rate limiting configuration
+RATE_LIMIT_COMMANDS_PER_MINUTE = 5  # Max commands per user per minute
+RATE_LIMIT_ORDERS_PER_HOUR = 3      # Max buy/sell orders per user per hour
+COMMAND_COOLDOWN_SECONDS = 10        # Cooldown between expensive commands
+
+# Anti-fraud measures
+MAX_CONCURRENT_DEALS = 1             # Only one deal per system at a time
+WALLET_VERIFICATION_REQUIRED = True  # Require wallet verification for deals
+DUPLICATE_ORDER_PREVENTION = True    # Prevent duplicate orders from same user
+
+# Payment processing security
+PAYMENT_CLAIM_TIMEOUT = 30           # Seconds to claim a payment before others can
+PAYMENT_VERIFICATION_STRICT = True   # Strict payment sender verification
+
 # === POLYGON CONFIG ===
 RPC_URL = "https://polygon-rpc.com"
 USDT_CONTRACT = "0xc2132d05d31c914a87c6611c10748aeb04b58e8f"
@@ -109,6 +124,146 @@ usdt = web3.eth.contract(
     abi=abi
 )
 print(f"✅ USDT Contract initialized at: {usdt.address}")
+
+# === SECURITY INFRASTRUCTURE ===
+# Global locks and tracking
+payment_processing_lock = threading.RLock()  # Reentrant lock for payment processing
+command_rate_tracker = {}                    # Track command usage per user
+order_rate_tracker = {}                      # Track order creation per user
+payment_claims = {}                          # Track payment claims to prevent race conditions
+active_command_users = set()                 # Track users with active commands
+
+def load_security_data():
+    """Load or create security tracking data"""
+    try:
+        with open('security_data.json', 'r') as f:
+            return json.load(f)
+    except:
+        return {
+            "command_history": {},
+            "order_history": {},
+            "failed_attempts": {},
+            "last_cleanup": time.time()
+        }
+
+def save_security_data(data):
+    """Save security tracking data"""
+    try:
+        with open('security_data.json', 'w') as f:
+            json.dump(data, f, indent=2)
+    except Exception as e:
+        print(f"❌ Failed to save security data: {e}")
+
+def cleanup_old_security_data():
+    """Clean up old security tracking data"""
+    security_data = load_security_data()
+    current_time = time.time()
+    
+    # Clean up data older than 24 hours
+    cutoff_time = current_time - (24 * 60 * 60)
+    
+    for data_type in ["command_history", "order_history", "failed_attempts"]:
+        if data_type in security_data:
+            security_data[data_type] = {
+                user: entries for user, entries in security_data[data_type].items()
+                if any(entry_time > cutoff_time for entry_time in entries.values())
+            }
+    
+    security_data["last_cleanup"] = current_time
+    save_security_data(security_data)
+
+def check_rate_limit(username, command_type="general"):
+    """Enhanced rate limiting with multiple tiers"""
+    security_data = load_security_data()
+    current_time = time.time()
+    
+    # Cleanup old data if needed
+    if current_time - security_data.get("last_cleanup", 0) > 3600:  # Every hour
+        cleanup_old_security_data()
+        security_data = load_security_data()
+    
+    user_key = f"@{username}"
+    
+    if command_type == "order":
+        # Check order rate limit (3 per hour)
+        history_key = "order_history"
+        time_window = 3600  # 1 hour
+        max_commands = RATE_LIMIT_ORDERS_PER_HOUR
+    else:
+        # Check general command rate limit (5 per minute)
+        history_key = "command_history"
+        time_window = 60  # 1 minute
+        max_commands = RATE_LIMIT_COMMANDS_PER_MINUTE
+    
+    if history_key not in security_data:
+        security_data[history_key] = {}
+    
+    if user_key not in security_data[history_key]:
+        security_data[history_key][user_key] = {}
+    
+    # Clean old entries for this user
+    user_history = security_data[history_key][user_key]
+    cutoff_time = current_time - time_window
+    user_history = {k: v for k, v in user_history.items() if v > cutoff_time}
+    security_data[history_key][user_key] = user_history
+    
+    # Check if limit exceeded
+    if len(user_history) >= max_commands:
+        save_security_data(security_data)
+        return False, f"Rate limit exceeded: {len(user_history)}/{max_commands} {command_type} commands"
+    
+    # Record this command
+    command_id = f"{command_type}_{int(current_time)}"
+    security_data[history_key][user_key][command_id] = current_time
+    save_security_data(security_data)
+    
+    return True, "Rate limit OK"
+
+def check_duplicate_order(username, amount, order_type):
+    """Prevent duplicate orders from the same user"""
+    if not DUPLICATE_ORDER_PREVENTION:
+        return True, "Duplicate check disabled"
+    
+    orders = load_orders()
+    user_key = f"@{username}"
+    
+    # Check existing orders for this user with same amount
+    order_list = orders.get(f"{order_type}_orders", {})
+    for order_id, order in order_list.items():
+        if (order.get("seller" if order_type == "sell" else "buyer") == user_key and 
+            order.get("amount") == amount and 
+            order.get("status") == "active"):
+            return False, f"Duplicate {order_type} order detected"
+    
+    return True, "No duplicate order"
+
+def secure_payment_claim(deal_id, expected_amount):
+    """Secure payment claiming with timeout to prevent race conditions"""
+    global payment_claims
+    
+    with payment_processing_lock:
+        current_time = time.time()
+        claim_key = f"{deal_id}_{expected_amount}"
+        
+        # Check if payment is already claimed
+        if claim_key in payment_claims:
+            claim_time = payment_claims[claim_key]
+            if current_time - claim_time < PAYMENT_CLAIM_TIMEOUT:
+                return False, f"Payment already claimed {int(current_time - claim_time)}s ago"
+            else:
+                # Claim expired, remove it
+                del payment_claims[claim_key]
+        
+        # Claim this payment
+        payment_claims[claim_key] = current_time
+        
+        # Clean old claims
+        payment_claims = {
+            k: v for k, v in payment_claims.items() 
+            if current_time - v < PAYMENT_CLAIM_TIMEOUT
+        }
+        
+        return True, "Payment claimed successfully"
 
 # === ESCROW DB ===
 DB_FILE = "escrows.json"
@@ -423,6 +578,18 @@ def buy_order(message):
         bot.reply_to(message, "❌ Please set a Telegram username to trade.")
         return
     
+    # SECURITY CHECK 1: Rate limiting
+    rate_ok, rate_msg = check_rate_limit(username, "order")
+    if not rate_ok:
+        bot.reply_to(message, 
+            f"⚠️ <b>Rate Limit Exceeded</b>\n\n"
+            f"{rate_msg}\n"
+            f"⏰ Please wait before placing more orders\n"
+            f"🛡️ This protects the system from spam", 
+            parse_mode='HTML'
+        )
+        return
+    
     # Check if user is blacklisted
     blacklist = load_blacklist()
     if f"@{username}" in blacklist:
@@ -494,6 +661,18 @@ def buy_order(message):
         return
     
     amount = float(args[0])
+    
+    # SECURITY CHECK 2: Prevent duplicate orders
+    duplicate_ok, duplicate_msg = check_duplicate_order(username, amount, "buy")
+    if not duplicate_ok:
+        bot.reply_to(message, 
+            f"⚠️ <b>Duplicate Order Detected</b>\n\n"
+            f"{duplicate_msg}\n"
+            f"💡 Cancel existing orders before creating new ones\n"
+            f"📊 Check your orders: /mystatus", 
+            parse_mode='HTML'
+        )
+        return
     
     orders = load_orders()
     order_id = str(int(time.time()))
@@ -605,6 +784,18 @@ def sell_order(message):
         bot.reply_to(message, "❌ Please set a Telegram username to trade.")
         return
     
+    # SECURITY CHECK 1: Rate limiting
+    rate_ok, rate_msg = check_rate_limit(username, "order")
+    if not rate_ok:
+        bot.reply_to(message, 
+            f"⚠️ <b>Rate Limit Exceeded</b>\n\n"
+            f"{rate_msg}\n"
+            f"⏰ Please wait before placing more orders\n"
+            f"🛡️ This protects the system from spam", 
+            parse_mode='HTML'
+        )
+        return
+    
     # Check if user is blacklisted
     blacklist = load_blacklist()
     if f"@{username}" in blacklist:
@@ -666,6 +857,19 @@ def sell_order(message):
         return
     
     amount = float(args[0])
+    
+    # SECURITY CHECK 2: Prevent duplicate orders
+    duplicate_ok, duplicate_msg = check_duplicate_order(username, amount, "sell")
+    if not duplicate_ok:
+        bot.reply_to(message, 
+            f"⚠️ <b>Duplicate Order Detected</b>\n\n"
+            f"{duplicate_msg}\n"
+            f"💡 Cancel existing orders before creating new ones\n"
+            f"📊 Check your orders: /mystatus", 
+            parse_mode='HTML'
+        )
+        return
+    
     orders = load_orders()
     order_id = str(int(time.time()))
     
@@ -1845,6 +2049,12 @@ def monitor_payments():
                             # Check if the deposit amount matches exactly (with small tolerance for precision)
                             if abs(diff - expected_amount) < 0.0001:
                                 print(f"💰 Amount match found for deal {deal_id}: {expected_amount} USDT")
+                                
+                                # SECURITY CHECK 3: Secure payment claiming to prevent race conditions
+                                claim_ok, claim_msg = secure_payment_claim(deal_id, expected_amount)
+                                if not claim_ok:
+                                    print(f"❌ Payment claim failed for deal {deal_id}: {claim_msg}")
+                                    continue
                                 
                                 # Check if deal is still valid (not expired)
                                 deal_age = time.time() - int(deal_id)
