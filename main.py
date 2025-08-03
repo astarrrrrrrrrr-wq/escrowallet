@@ -339,12 +339,13 @@ bot = telebot.TeleBot(BOT_TOKEN)
 def is_admin(username):
     return username in ADMIN_USERNAMES
 
-def get_usdt_balance():
+def get_usdt_balance(verbose=False):
     try:
         checksum_address = Web3.to_checksum_address(ESCROW_WALLET)
         web3.eth.get_block('latest')  # Sync
         balance = usdt.functions.balanceOf(checksum_address).call()
-        print(f"✅ Fetched raw USDT balance: {balance} (scaled: {balance / (10 ** USDT_DECIMALS)} USDT)")
+        if verbose:
+            print(f"✅ Fetched raw USDT balance: {balance} (scaled: {balance / (10 ** USDT_DECIMALS)} USDT)")
         return balance / (10 ** USDT_DECIMALS)
     except Exception as e:
         print(f"⚠️ Error fetching balance: {e}")
@@ -1486,7 +1487,7 @@ def balance_command(message):
         bot.reply_to(message, "🚫 Only admins can check balance.")
         return
     
-    usdt_balance = get_usdt_balance()
+    usdt_balance = get_usdt_balance(verbose=True)  # Show detailed output for admin balance checks
     matic_balance = get_matic_balance()
     
     # Check transaction capability
@@ -1963,7 +1964,7 @@ def view_blacklist(message):
 def stats_command(message):
     db = load_db()
     blacklist = load_blacklist()
-    balance = get_usdt_balance()
+    balance = get_usdt_balance(verbose=True)  # Show detailed output for stats command
     
     if not db:
         total_deals = 0
@@ -2022,7 +2023,7 @@ def stats_command(message):
 
 # === ENHANCED PAYMENT MONITORING ===
 def monitor_payments():
-    last_balance = get_usdt_balance()
+    last_balance = get_usdt_balance(verbose=True)  # Show initial balance on startup
     print(f"🔍 Starting payment monitor with initial balance: {last_balance} USDT")
     payment_lock = threading.Lock()  # Prevent race conditions
     
@@ -2033,7 +2034,7 @@ def monitor_payments():
                 check_deal_expiry()
                 
                 db = load_db()
-                new_balance = get_usdt_balance()
+                new_balance = get_usdt_balance()  # Silent monitoring - no verbose logging
                 
                 # Check if there's an increase in balance
                 if new_balance > last_balance:
