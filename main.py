@@ -525,7 +525,8 @@ def start(message):
         "✅ <b>Deal Commands:</b>\n"
         "💸 /paid - Confirm you sent fiat payment\n"
         "✅ /received - Confirm you received fiat payment\n"
-        "❌ /notreceived - Report payment not received\n\n"
+        "❌ /notreceived - Report payment not received\n"
+        "🚫 /cancel - Cancel your orders or deals\n\n"
         "ℹ️ <b>Info Commands:</b>\n"
         "💡 /help - Detailed trading guide\n"
         "💰 /balance - Check escrow balance\n"
@@ -1218,6 +1219,90 @@ def payment_not_received(message):
         except:
             continue
 
+@bot.message_handler(commands=['cancel'])
+def cancel_order(message):
+    username = message.from_user.username
+    if not username:
+        bot.reply_to(message, "❌ Please set a Telegram username to use this feature.")
+        return
+    
+    # SECURITY CHECK: Rate limiting for cancel commands
+    rate_ok, rate_msg = check_rate_limit(username, "general")
+    if not rate_ok:
+        bot.reply_to(message, 
+            f"⚠️ <b>Rate Limit Exceeded</b>\n\n"
+            f"{rate_msg}\n"
+            f"⏰ Please wait before using cancel command again", 
+            parse_mode='HTML'
+        )
+        return
+    
+    orders = load_orders()
+    db = load_db()
+    cancelled_items = []
+    
+    # Cancel active orders
+    for order_id in list(orders["buy_orders"].keys()):
+        order = orders["buy_orders"][order_id]
+        if order["buyer"] == f"@{username}":
+            cancelled_items.append(f"🛒 Buy Order: {order['amount']} USDT")
+            del orders["buy_orders"][order_id]
+    
+    for order_id in list(orders["sell_orders"].keys()):
+        order = orders["sell_orders"][order_id]
+        if order["seller"] == f"@{username}":
+            cancelled_items.append(f"💰 Sell Order: {order['amount']} USDT")
+            del orders["sell_orders"][order_id]
+    
+    # Cancel active deals (only if not yet paid)
+    for deal_id in list(db.keys()):
+        deal = db[deal_id]
+        if (deal["buyer"] == f"@{username}" or deal["seller"] == f"@{username}") and \
+           deal["status"] in ["waiting_usdt_deposit", "usdt_deposited"]:
+            
+            # Determine role and cancellation reason
+            role = "Buyer" if deal["buyer"] == f"@{username}" else "Seller"
+            other_party = deal["seller"] if deal["buyer"] == f"@{username}" else deal["buyer"]
+            
+            cancelled_items.append(f"🤝 Active Deal: {deal['amount']} USDT (ID: {deal_id})")
+            
+            # Mark deal as cancelled
+            db[deal_id]["status"] = "cancelled_by_user"
+            db[deal_id]["cancelled_by"] = f"@{username}"
+            db[deal_id]["cancelled_at"] = time.time()
+            
+            # Notify the other party about cancellation
+            bot.send_message(
+                chat_id=GROUP_ID,
+                text=f"❌ <b>Deal Cancelled</b>\n\n"
+                     f"🆔 Deal ID: <code>{deal_id}</code>\n"
+                     f"👤 Cancelled by: @{username} ({role})\n"
+                     f"👥 Other party: {other_party}\n"
+                     f"💰 Amount: {deal['amount']} USDT\n\n"
+                     f"🔄 You can create new orders anytime",
+                parse_mode='HTML'
+            )
+    
+    # Save changes
+    save_orders(orders)
+    save_db(db)
+    
+    if cancelled_items:
+        cancel_msg = f"✅ <b>Cancellation Successful</b>\n\n"
+        cancel_msg += f"📝 <b>Cancelled Items:</b>\n"
+        for item in cancelled_items:
+            cancel_msg += f"   {item}\n"
+        cancel_msg += f"\n🔄 You can create new orders anytime with /buy or /sell"
+        
+        bot.reply_to(message, cancel_msg, parse_mode='HTML')
+    else:
+        bot.reply_to(message, 
+            "❌ <b>Nothing to Cancel</b>\n\n"
+            "You don't have any active orders or deals to cancel.\n\n"
+            "💡 Use /mystatus to check your current trading activity", 
+            parse_mode='HTML'
+        )
+
 def release_usdt_to_buyer(deal_id, deal):
     """Automatically release USDT to buyer when both parties confirm"""
     try:
@@ -1422,7 +1507,8 @@ def help_command(message):
         "🔹 <b>4. Confirmation Commands</b>\n"
         "   <code>/paid</code> - Buyer confirms fiat sent\n"
         "   <code>/received</code> - Seller confirms fiat received\n"
-        "   <code>/notreceived</code> - Report payment issue\n\n"
+        "   <code>/notreceived</code> - Report payment issue\n"
+        "   <code>/cancel</code> - Cancel your orders/deals\n\n"
         "🔹 <b>5. View Commands</b>\n"
         "   <code>/orders</code> - See all active orders\n"
         "   <code>/mystatus</code> - Your active trades\n"

@@ -58,6 +58,14 @@ Preferred communication style: Simple, everyday language.
 
 ## Recent Changes
 
+### August 3, 2025 - /cancel Command & User Experience Enhancement
+- **New /cancel Command**: Added comprehensive cancellation feature allowing users to cancel their active orders and early-stage deals
+- **Smart Cancellation Logic**: Users can cancel buy/sell orders and deals that haven't progressed beyond USDT deposit stage
+- **Automatic Notifications**: Other party is automatically notified when deals are cancelled with clear reason and canceller information
+- **Rate Limited Security**: Cancel command includes rate limiting protection to prevent spam cancellations
+- **Updated Help System**: Both /help and /start commands now include the new /cancel functionality
+- **Status**: ✅ Full cancellation system operational, giving users complete control over their trading activity
+
 ### August 3, 2025 - Critical Spam Fix & Enhanced Payment Detection
 - **Telegram Spam Resolution**: Fixed repeated deal expiration messages by implementing one-time notification system with expiry_notified flag
 - **Enhanced Payment Detection**: Improved payment monitoring with detailed sender information, transaction context, and verification status
