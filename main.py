@@ -1081,6 +1081,17 @@ def confirm_paid(message):
         bot.reply_to(message, "❌ Please set a Telegram username to use this feature.")
         return
     
+    # SECURITY CHECK: Rate limiting
+    rate_ok, rate_msg = check_rate_limit(username, "general")
+    if not rate_ok:
+        bot.reply_to(message, 
+            f"⚠️ <b>Rate Limit Exceeded</b>\n\n"
+            f"{rate_msg}\n"
+            f"⏰ Please wait before using this command again", 
+            parse_mode='HTML'
+        )
+        return
+    
     # Find active deal where user is the buyer
     db = load_db()
     user_deal = None
@@ -1100,7 +1111,7 @@ def confirm_paid(message):
         )
         return
     
-    # CHECK: USDT must be deposited before buyer can confirm fiat payment
+    # CRITICAL FIX: USDT must be deposited before buyer can confirm fiat payment
     if user_deal["status"] != "usdt_deposited":
         bot.reply_to(message, 
             f"⚠️ <b>Cannot Confirm Payment Yet</b>\n\n"
@@ -1114,9 +1125,21 @@ def confirm_paid(message):
         )
         return
     
-    # Mark buyer as confirmed payment sent
+    # SECURITY CHECK: Prevent double confirmation
+    if user_deal.get("buyer_confirmed", False):
+        bot.reply_to(message, 
+            f"⚠️ <b>Already Confirmed</b>\n\n"
+            f"🆔 Deal ID: <code>{deal_id}</code>\n"
+            f"✅ You already confirmed sending fiat payment\n"
+            f"⏳ Waiting for {user_deal['seller']} to use /received", 
+            parse_mode='HTML'
+        )
+        return
+    
+    # Mark buyer as confirmed payment sent - NO USDT RELEASE YET
     db[deal_id]["buyer_confirmed"] = True
     db[deal_id]["status"] = "buyer_paid"
+    db[deal_id]["buyer_confirmed_at"] = time.time()
     save_db(db)
     
     bot.reply_to(message, 
@@ -1124,6 +1147,7 @@ def confirm_paid(message):
         f"🆔 Deal ID: <code>{deal_id}</code>\n"
         f"💸 You confirmed sending fiat payment\n"
         f"⏳ Waiting for {user_deal['seller']} to confirm receipt\n\n"
+        f"⚠️ <b>IMPORTANT:</b> USDT will only be released after BOTH confirmations\n"
         f"📋 Next: {user_deal['seller']} should use /received", 
         parse_mode='HTML'
     )
@@ -1131,12 +1155,13 @@ def confirm_paid(message):
     # Notify the seller
     bot.send_message(
         chat_id=GROUP_ID,
-        text=f"💸 <b>Payment Sent Notification</b>\n\n"
+        text=f"💸 <b>Fiat Payment Sent Notification</b>\n\n"
              f"🆔 Deal ID: <code>{deal_id}</code>\n"
              f"💼 {user_deal['buyer']} confirmed sending fiat payment\n"
-             f"🛒 {user_deal['seller']}: Please confirm if you received payment\n"
-             f"✅ Use /received if you got the payment\n"
-             f"❌ Use /notreceived if you didn't receive it",
+             f"🛒 {user_deal['seller']}: Please check and confirm receipt\n\n"
+             f"✅ Use /received if you got the fiat payment\n"
+             f"❌ Use /notreceived if you didn't receive it\n\n"
+             f"🔒 <b>Security:</b> USDT is still secured in escrow until you confirm",
         parse_mode='HTML'
     )
 
@@ -1145,6 +1170,17 @@ def confirm_received(message):
     username = message.from_user.username
     if not username:
         bot.reply_to(message, "❌ Please set a Telegram username to use this feature.")
+        return
+    
+    # SECURITY CHECK: Rate limiting
+    rate_ok, rate_msg = check_rate_limit(username, "general")
+    if not rate_ok:
+        bot.reply_to(message, 
+            f"⚠️ <b>Rate Limit Exceeded</b>\n\n"
+            f"{rate_msg}\n"
+            f"⏰ Please wait before using this command again", 
+            parse_mode='HTML'
+        )
         return
     
     # Find active deal where user is the seller
@@ -1166,45 +1202,98 @@ def confirm_received(message):
         )
         return
     
-    # CHECK: USDT must be deposited before seller can confirm fiat receipt
+    # CRITICAL CHECK: USDT must be deposited AND buyer must have confirmed fiat payment
     if user_deal["status"] not in ["usdt_deposited", "buyer_paid"]:
         bot.reply_to(message, 
             f"⚠️ <b>Cannot Confirm Receipt Yet</b>\n\n"
             f"🆔 Deal ID: <code>{deal_id}</code>\n"
             f"📍 Current Status: {user_deal['status'].replace('_', ' ').title()}\n\n"
-            f"❌ <b>USDT not yet deposited to escrow!</b>\n"
-            f"💰 You must send {user_deal['amount']} USDT to escrow first\n"
-            f"🏦 Escrow Address: <code>{ESCROW_WALLET}</code>\n\n"
-            f"🛡️ <b>Security:</b> USDT must be secured before confirming fiat receipt", 
+            f"❌ <b>Requirements not met!</b>\n"
+            f"1. ✅ USDT must be deposited to escrow\n"
+            f"2. ⏳ Buyer must confirm fiat payment with /paid\n\n"
+            f"🛡️ <b>Security:</b> Both steps required before confirming receipt", 
+            parse_mode='HTML'
+        )
+        return
+    
+    # ADDITIONAL CHECK: Buyer must have confirmed fiat payment first
+    if user_deal["status"] == "usdt_deposited" and not user_deal.get("buyer_confirmed", False):
+        bot.reply_to(message, 
+            f"⚠️ <b>Buyer Has Not Sent Fiat Yet</b>\n\n"
+            f"🆔 Deal ID: <code>{deal_id}</code>\n"
+            f"⏳ Wait for {user_deal['buyer']} to send fiat and use /paid first\n\n"
+            f"📋 <b>Current Status:</b>\n"
+            f"✅ USDT secured in escrow\n"
+            f"❌ Buyer has not confirmed sending fiat payment\n\n"
+            f"🛡️ Only confirm receipt AFTER receiving fiat payment", 
+            parse_mode='HTML'
+        )
+        return
+    
+    # SECURITY CHECK: Prevent double confirmation
+    if user_deal.get("seller_confirmed", False):
+        bot.reply_to(message, 
+            f"⚠️ <b>Already Confirmed</b>\n\n"
+            f"🆔 Deal ID: <code>{deal_id}</code>\n"
+            f"✅ You already confirmed receiving fiat payment\n"
+            f"⏳ Processing automatic USDT release...", 
             parse_mode='HTML'
         )
         return
     
     # Mark seller as confirmed payment received
     db[deal_id]["seller_confirmed"] = True
+    db[deal_id]["seller_confirmed_at"] = time.time()
     save_db(db)
     
-    # Check if both parties have confirmed
-    if db[deal_id]["buyer_confirmed"] and db[deal_id]["seller_confirmed"]:
+    # CRITICAL: Now check if both parties have confirmed (dual confirmation required)
+    if db[deal_id].get("buyer_confirmed", False) and db[deal_id].get("seller_confirmed", False):
         # Both confirmed - release USDT automatically
         try:
             release_usdt_to_buyer(deal_id, user_deal)
+            bot.reply_to(message, 
+                f"🎉 <b>Deal Completed Successfully!</b>\n\n"
+                f"🆔 Deal ID: <code>{deal_id}</code>\n"
+                f"💰 You confirmed receiving fiat payment\n"
+                f"✅ USDT automatically released to buyer\n\n"
+                f"🤝 Thank you for trading safely with escrow protection!", 
+                parse_mode='HTML'
+            )
         except Exception as e:
             bot.reply_to(message, 
-                f"❌ <b>Auto-release failed</b>\n\n"
+                f"❌ <b>Auto-release Failed</b>\n\n"
                 f"🆔 <b>Deal ID:</b> <code>{deal_id}</code>\n"
                 f"💵 <b>Amount:</b> {user_deal['amount']} USDT\n"
                 f"🚨 <b>Error:</b> {str(e)}\n\n"
                 f"🛠️ <b>Admin intervention required.</b>\n"
-                f"Use /forcerelease {deal_id} when MATIC is funded", 
+                f"Contact admins to use /forcerelease {deal_id}", 
                 parse_mode='HTML'
             )
+            
+            # Notify admins
+            admin_msg = (
+                f"🚨 <b>AUTO-RELEASE FAILED</b>\n\n"
+                f"🆔 Deal ID: <code>{deal_id}</code>\n"
+                f"💵 Amount: {user_deal['amount']} USDT\n"
+                f"👥 Buyer: {user_deal['buyer']}\n"
+                f"👥 Seller: {user_deal['seller']}\n"
+                f"🚨 Error: {str(e)}\n\n"
+                f"🛠️ Use /forcerelease {deal_id} to complete manually"
+            )
+            
+            for admin in ADMIN_USERNAMES:
+                try:
+                    bot.send_message(chat_id=GROUP_ID, text=admin_msg, parse_mode='HTML')
+                    break
+                except:
+                    continue
     else:
+        # This should not happen due to our checks above, but as a fallback
         bot.reply_to(message, 
-            f"✅ <b>Payment Receipt Confirmed</b>\n\n"
+            f"⚠️ <b>Incomplete Confirmation</b>\n\n"
             f"🆔 Deal ID: <code>{deal_id}</code>\n"
             f"💰 You confirmed receiving fiat payment\n"
-            f"⏳ Waiting for final confirmation from {user_deal['buyer']}", 
+            f"❌ Buyer confirmation missing - contact admin for assistance", 
             parse_mode='HTML'
         )
 
@@ -2303,7 +2392,8 @@ def stats_command(message):
 def monitor_payments():
     last_balance = get_usdt_balance(verbose=True)  # Show initial balance on startup
     print(f"🔍 Starting payment monitor with initial balance: {last_balance} USDT")
-    payment_lock = threading.Lock()  # Prevent race conditions
+    payment_lock = threading.RLock()  # Reentrant lock for complex operations
+    processed_payments = set()  # Track processed payments to prevent duplicates
     
     while True:
         try:
@@ -2319,27 +2409,44 @@ def monitor_payments():
                     diff = new_balance - last_balance
                     print(f"💰 Balance increase detected: +{diff} USDT (Total: {new_balance} USDT)")
                     
+                    # Create unique payment identifier to prevent double processing
+                    payment_id = f"{int(time.time())}_{diff}_{new_balance}"
+                    
+                    if payment_id in processed_payments:
+                        print(f"⚠️ Payment {payment_id} already processed, skipping")
+                        last_balance = new_balance
+                        continue
+                    
                     # Check for deals waiting for USDT deposit
+                    payment_matched = False
                     for deal_id, deal in db.items():
                         if deal["status"] == "waiting_usdt_deposit":
                             expected_amount = deal["amount"]
                             seller_wallet = deal.get("seller_wallet", "Not set")
                             
-                            # Check if the deposit amount matches exactly (with small tolerance for precision)
-                            if abs(diff - expected_amount) < 0.0001:
+                            # Check if the deposit amount matches exactly (with tolerance for precision)
+                            if abs(diff - expected_amount) < 0.01:  # Increased tolerance slightly
                                 print(f"💰 Amount match found for deal {deal_id}: {expected_amount} USDT")
                                 
-                                # SECURITY CHECK 3: Secure payment claiming to prevent race conditions
+                                # SECURITY CHECK: Secure payment claiming to prevent race conditions
                                 claim_ok, claim_msg = secure_payment_claim(deal_id, expected_amount)
                                 if not claim_ok:
                                     print(f"❌ Payment claim failed for deal {deal_id}: {claim_msg}")
                                     continue
                                 
                                 # Check if deal is still valid (not expired)
-                                deal_age = time.time() - int(deal_id)
-                                if deal_age > (DEAL_EXPIRY_MINUTES * 60):
-                                    print(f"❌ Deal {deal_id} expired, ignoring payment")
-                                    continue
+                                try:
+                                    deal_timestamp = int(deal_id)
+                                    deal_age = time.time() - deal_timestamp
+                                    if deal_age > (DEAL_EXPIRY_MINUTES * 60):
+                                        print(f"❌ Deal {deal_id} expired {int(deal_age/60)} minutes ago, ignoring payment")
+                                        continue
+                                except (ValueError, TypeError):
+                                    print(f"⚠️ Invalid deal_id format: {deal_id}, processing anyway")
+                                
+                                # Mark payment as processed
+                                processed_payments.add(payment_id)
+                                payment_matched = True
                                 
                                 # Initialize tx_info
                                 tx_info = None
@@ -2393,44 +2500,51 @@ def monitor_payments():
                                 # Payment verified or seller wallet not set - proceed
                                 print(f"✅ Payment verified for deal {deal_id}")
                                 
-                                # Update deal status
-                                db[deal_id]["status"] = "usdt_deposited"
-                                db[deal_id]["deposit_confirmed_at"] = time.time()
-                                if tx_info:
-                                    db[deal_id]["deposit_tx_hash"] = tx_info.get('tx_hash')
-                                save_db(db)
-                                
-                                # Enhanced notification with detailed sender information and workflow
-                                sender_info = ""
-                                if seller_wallet != "Not set" and tx_info:
-                                    sender_info = (
-                                        f"🔗 <b>Payment Details:</b>\n"
-                                        f"📨 From: <code>{tx_info.get('from', seller_wallet)[:10]}...{tx_info.get('from', seller_wallet)[-4:]}</code>\n"
-                                        f"🔒 Verified: ✅ Authorized Seller\n"
-                                        f"🕐 Received: {time.strftime('%H:%M:%S UTC', time.gmtime())}\n\n"
+                                # Update deal status with enhanced security
+                                db = load_db()  # Reload to ensure fresh data
+                                if deal_id in db and db[deal_id]["status"] == "waiting_usdt_deposit":
+                                    db[deal_id]["status"] = "usdt_deposited"
+                                    db[deal_id]["deposit_confirmed_at"] = time.time()
+                                    db[deal_id]["payment_id"] = payment_id  # Track payment ID
+                                    if tx_info:
+                                        db[deal_id]["deposit_tx_hash"] = tx_info.get('tx_hash')
+                                    save_db(db)
+                                    
+                                    # Enhanced notification with detailed sender information and workflow
+                                    sender_info = ""
+                                    if seller_wallet != "Not set" and tx_info:
+                                        sender_info = (
+                                            f"🔗 <b>Payment Details:</b>\n"
+                                            f"📨 From: <code>{tx_info.get('from', seller_wallet)[:10]}...{tx_info.get('from', seller_wallet)[-4:]}</code>\n"
+                                            f"🔒 Verified: ✅ Authorized Seller\n"
+                                            f"🕐 Received: {time.strftime('%H:%M:%S UTC', time.gmtime())}\n\n"
+                                        )
+                                    elif seller_wallet != "Not set":
+                                        sender_info = f"🔒 Verified from seller's wallet: <code>{seller_wallet[:10]}...{seller_wallet[-4:]}</code>\n\n"
+                                    else:
+                                        sender_info = "⚠️ Payment received (sender verification skipped - no wallet set)\n\n"
+                                    
+                                    bot.send_message(
+                                        chat_id=GROUP_ID,
+                                        text=f"✅ <b>USDT PAYMENT RECEIVED IN ESCROW!</b>\n\n"
+                                             f"💰 <b>Amount:</b> {expected_amount} USDT\n"
+                                             f"🆔 <b>Deal ID:</b> <code>{deal_id}</code>\n"
+                                             f"👥 <b>Participants:</b> {deal['buyer']} ↔️ {deal['seller']}\n\n"
+                                             f"{sender_info}"
+                                             f"📋 <b>CRITICAL WORKFLOW:</b>\n\n"
+                                             f"1️⃣ <b>{deal['buyer']} - Send Fiat Payment:</b>\n"
+                                             f"   💸 Send fiat payment to {deal['seller']}\n"
+                                             f"   ✅ Use <code>/paid</code> ONLY after sending fiat\n\n"
+                                             f"2️⃣ <b>{deal['seller']} - Confirm Receipt:</b>\n"
+                                             f"   ⏳ Wait for fiat from {deal['buyer']}\n"
+                                             f"   ✅ Use <code>/received</code> ONLY after receiving fiat\n\n"
+                                             f"🔐 <b>Security:</b> USDT releases ONLY when BOTH confirm\n"
+                                             f"⚠️ <b>Important:</b> No premature confirmations allowed!",
+                                        parse_mode='HTML'
                                     )
-                                elif seller_wallet != "Not set":
-                                    sender_info = f"🔒 Verified from seller's wallet: <code>{seller_wallet[:10]}...{seller_wallet[-4:]}</code>\n\n"
                                 else:
-                                    sender_info = "⚠️ Payment received (sender verification skipped - no wallet set)\n\n"
+                                    print(f"⚠️ Deal {deal_id} status changed or not found during processing")
                                 
-                                bot.send_message(
-                                    chat_id=GROUP_ID,
-                                    text=f"✅ <b>USDT PAYMENT RECEIVED IN ESCROW!</b>\n\n"
-                                         f"💰 <b>Amount:</b> {expected_amount} USDT\n"
-                                         f"🆔 <b>Deal ID:</b> <code>{deal_id}</code>\n"
-                                         f"👥 <b>Participants:</b> {deal['buyer']} ↔️ {deal['seller']}\n\n"
-                                         f"{sender_info}"
-                                         f"📋 <b>NEXT STEPS:</b>\n\n"
-                                         f"1️⃣ <b>@{deal['buyer']} - Send Fiat Payment:</b>\n"
-                                         f"   💸 Send payment to @{deal['seller']} now\n"
-                                         f"   ✅ Use <code>/paid</code> after sending\n\n"
-                                         f"2️⃣ <b>@{deal['seller']} - Confirm Receipt:</b>\n"
-                                         f"   ⏳ Wait for fiat from @{deal['buyer']}\n"
-                                         f"   ✅ Use <code>/received</code> when you get it\n\n"
-                                         f"🔐 <b>Security:</b> USDT will auto-release when both confirm",
-                                    parse_mode='HTML'
-                                )
                                 break
                             
                             elif diff > expected_amount:
@@ -2517,6 +2631,13 @@ def monitor_payments():
                                         continue
                                 break
                 
+                # Clean up old processed payments (keep only last 100)
+                    if len(processed_payments) > 100:
+                        # Keep most recent 50 payments
+                        recent_payments = list(processed_payments)[-50:]
+                        processed_payments.clear()
+                        processed_payments.update(recent_payments)
+                
                 # Update balance tracker
                 last_balance = new_balance
                 
@@ -2537,8 +2658,11 @@ def monitor_payments():
                         
         except Exception as e:
             print(f"⚠️ Error in payment monitoring: {e}")
+            import traceback
+            traceback.print_exc()
+            # Continue monitoring despite errors
             
-        time.sleep(30)  # Check every 30 seconds
+        time.sleep(15)  # Reduced to 15 seconds for better responsiveness
 
 # === FLASK SERVER FOR KEEPALIVE ===
 app = Flask(__name__)
