@@ -30,6 +30,7 @@ Preferred communication style: Simple, everyday language.
 - **Web Server Component**: Flask server for health checks (`/`, `/health`, `/status`) and uptime monitoring.
 - **Deal Workflow**: Comprehensive system for order placement, automatic matching, USDT deposit, fiat transfer, dual confirmation, automatic release, and dispute resolution.
 - **Security Features**: Includes admin username verification, private key environment variable protection, group-specific bot operation, blacklist functionality, race condition prevention, multi-tier rate limiting, duplicate order prevention, and enhanced payment verification for fraud detection.
+- **Transaction Fee System**: Tiered fee structure with 6 levels ($1-5: $0.3, $5-10: $0.5, $10-20: $0.8, $20-30: $1.0, $30-40: $1.3, $40-50: $1.6), automatic fee deduction during USDT release, transparent fee display in notifications, and admin fee statistics tracking.
 
 ## External Dependencies
 ### Required Python Packages
@@ -47,3 +48,14 @@ Preferred communication style: Simple, everyday language.
 - Consistent Polygon network connectivity.
 - Stable Telegram API access.
 - Reliable internet connection for all RPC calls.
+
+## Recent Changes
+
+### August 4, 2025 - Transaction Fee System Implementation
+- **Added Tiered Fee Structure**: Implemented 6-tier fee system based on transaction amounts ($1-5: $0.3, $5-10: $0.5, $10-20: $0.8, $20-30: $1.0, $30-40: $1.3, $40-50: $1.6)
+- **Automatic Fee Deduction**: Modified `release_usdt_to_buyer` function to automatically deduct service fees before USDT transfer
+- **Enhanced Deal Tracking**: Added fee information to deal records (original_amount, transaction_fee, amount_received)
+- **User Information Commands**: Added `/fees` command to display fee structure and `/feestats` admin command for collection statistics
+- **Updated Help System**: Modified help command to include fee information and trading process updates
+- **Transparent Fee Display**: Deal completion notifications now show fee breakdown and amount received
+- **Status**: ✅ Complete fee system operational with transparent user communication

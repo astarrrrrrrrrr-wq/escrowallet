@@ -15,7 +15,7 @@ BOT_TOKEN = os.getenv("BOT_TOKEN")
 if not BOT_TOKEN:
     raise ValueError("BOT_TOKEN environment variable is required")
 
-ADMIN_USERNAMES = ["Indianarmy_1947", "Threethirty330", "ASTARR000"]  # Fixed: Removed @ symbol for consistency
+ADMIN_USERNAMES = [ "Threethirty330", "t1start1"]  # Fixed: Removed @ symbol for consistency
 GROUP_ID = -4986666475
 
 ESCROW_WALLET = "0x5a2dD9bFe9cB39F6A1AD806747ce29718b1BfB70"
@@ -27,6 +27,18 @@ if not PRIVATE_KEY:
 MIN_TRANSACTION_AMOUNT = 0.05  # Minimum 5 USDT
 MAX_TRANSACTION_AMOUNT = 50.0  # Maximum 50 USDT per deal
 DEAL_EXPIRY_MINUTES = 15  # Deals expire after 15 minutes
+
+# === TRANSACTION FEE STRUCTURE ===
+# Fee tiers based on transaction amount in USDT
+FEE_STRUCTURE = [
+    {"min": 1.0, "max": 5.0, "fee": 0.3},      # $1-5: $0.3 fee
+    {"min": 5.0, "max": 10.0, "fee": 0.5},     # $5-10: $0.5 fee  
+    {"min": 10.0, "max": 20.0, "fee": 0.8},    # $10-20: $0.8 fee
+    {"min": 20.0, "max": 30.0, "fee": 1.0},    # $20-30: $1.0 fee
+    {"min": 30.0, "max": 40.0, "fee": 1.3},    # $30-40: $1.3 fee
+    {"min": 40.0, "max": 50.0, "fee": 1.6},    # $40-50: $1.6 fee
+]
+FEE_COLLECTION_ENABLED = True  # Enable/disable fee collection
 
 # === ENHANCED SECURITY CONFIG ===
 # Rate limiting configuration
@@ -369,6 +381,22 @@ def get_matic_balance():
     except Exception as e:
         print(f"⚠️ Error fetching MATIC balance: {e}")
         return 0
+
+def calculate_transaction_fee(amount):
+    """Calculate transaction fee based on amount and fee structure"""
+    if not FEE_COLLECTION_ENABLED:
+        return 0.0
+    
+    for tier in FEE_STRUCTURE:
+        if tier["min"] <= amount <= tier["max"]:
+            return tier["fee"]
+    
+    # If amount is below minimum fee tier, no fee
+    if amount < FEE_STRUCTURE[0]["min"]:
+        return 0.0
+    
+    # If amount is above maximum tier, use highest tier fee
+    return FEE_STRUCTURE[-1]["fee"]
 
 def verify_payment_sender(expected_amount, expected_sender_wallet, time_window=300):
     """CRITICAL SECURITY: Real blockchain verification to prevent fraud"""
@@ -1583,7 +1611,7 @@ def direct_payment_address(message):
     )
 
 def release_usdt_to_buyer(deal_id, deal):
-    """Automatically release USDT to buyer when both parties confirm"""
+    """Automatically release USDT to buyer when both parties confirm (with fee deduction)"""
     try:
         # Check MATIC balance first
         matic_balance = get_matic_balance()
@@ -1602,12 +1630,20 @@ def release_usdt_to_buyer(deal_id, deal):
             bot.send_message(chat_id=GROUP_ID, text=error_msg, parse_mode='HTML')
             raise Exception(f"Insufficient MATIC balance: {matic_balance:.6f} MATIC (need 0.005+)")
         
-        amount = int(deal["amount"] * (10 ** USDT_DECIMALS))
+        # Calculate transaction fee
+        original_amount = deal["amount"]
+        transaction_fee = calculate_transaction_fee(original_amount)
+        amount_after_fee = original_amount - transaction_fee
+        
+        # Convert to wei for blockchain transaction
+        amount_wei = int(amount_after_fee * (10 ** USDT_DECIMALS))
         nonce = web3.eth.get_transaction_count(Web3.to_checksum_address(ESCROW_WALLET))
+        
+        print(f"💰 Transaction Details: Original: {original_amount} USDT, Fee: {transaction_fee} USDT, After Fee: {amount_after_fee} USDT")
         
         txn = usdt.functions.transfer(
             Web3.to_checksum_address(deal["buyer_wallet"]),
-            amount
+            amount_wei
         ).build_transaction({
             'from': Web3.to_checksum_address(ESCROW_WALLET),
             'gas': 100000,
@@ -1618,20 +1654,33 @@ def release_usdt_to_buyer(deal_id, deal):
         signed_txn = web3.eth.account.sign_transaction(txn, PRIVATE_KEY)
         tx_hash = web3.eth.send_raw_transaction(signed_txn.rawTransaction)
         
-        # Update deal status
+        # Update deal status with fee information
         db = load_db()
         db[deal_id]["status"] = "completed"
         db[deal_id]["tx_hash"] = web3.to_hex(tx_hash)
+        db[deal_id]["original_amount"] = original_amount
+        db[deal_id]["transaction_fee"] = transaction_fee
+        db[deal_id]["amount_received"] = amount_after_fee
         save_db(db)
         
-        # Send completion notification
+        # Create fee breakdown message
+        fee_msg = ""
+        if transaction_fee > 0:
+            fee_msg = (
+                f"💳 <b>Fee Breakdown:</b>\n"
+                f"💵 Original Amount: {original_amount} USDT\n"
+                f"🏦 Service Fee: {transaction_fee} USDT\n"
+                f"✅ Amount Received: {amount_after_fee} USDT\n\n"
+            )
+        
+        # Send completion notification with fee details
         bot.send_message(
             chat_id=GROUP_ID,
             text=f"🎉 <b>Deal Completed Successfully!</b>\n\n"
                  f"🆔 Deal ID: <code>{deal_id}</code>\n"
                  f"💼 Buyer: {deal['buyer']}\n"
-                 f"🛒 Seller: {deal['seller']}\n"
-                 f"💵 Amount: {deal['amount']} USDT\n"
+                 f"🛒 Seller: {deal['seller']}\n\n"
+                 f"{fee_msg}"
                  f"✅ USDT sent to buyer's wallet\n"
                  f"🔗 TX Hash: <code>{web3.to_hex(tx_hash)}</code>\n\n"
                  f"🤝 Thank you for using our escrow service!\n\n"
@@ -1782,7 +1831,8 @@ def help_command(message):
         "   • Orders auto-match when amounts match\n"
         "   • Seller sends USDT to escrow wallet\n"
         "   • Buyer sends fiat to seller\n"
-        "   • Both confirm: /paid and /received\n\n"
+        "   • Both confirm: /paid and /received\n"
+        "   • USDT released (minus service fee)\n\n"
         "🔹 <b>4. Confirmation Commands</b>\n"
         "   <code>/paid</code> - Buyer confirms fiat sent\n"
         "   <code>/received</code> - Seller confirms fiat received\n"
@@ -1793,10 +1843,77 @@ def help_command(message):
         "🔹 <b>6. View Commands</b>\n"
         "   <code>/orders</code> - See all active orders\n"
         "   <code>/mystatus</code> - Your active trades\n"
-        "   <code>/balance</code> - Escrow balance\n\n"
-        "🛡️ <b>Security:</b> All USDT held in escrow until both parties confirm!"
+        "   <code>/balance</code> - Escrow balance\n"
+        "   <code>/fees</code> - View fee structure\n\n"
+        "🛡️ <b>Security:</b> All USDT held in escrow until both parties confirm!\n"
+        "💳 <b>Service fees apply - use /fees for details</b>"
     )
     bot.reply_to(message, help_msg, parse_mode='HTML')
+
+@bot.message_handler(commands=['fees'])
+def show_fees(message):
+    """Display transaction fee structure"""
+    fee_msg = "💳 <b>Transaction Fee Structure</b>\n\n"
+    
+    if not FEE_COLLECTION_ENABLED:
+        fee_msg += "✅ <b>Fees Currently Disabled</b>\n\nNo fees are being charged at this time."
+    else:
+        fee_msg += "📊 <b>Fee Tiers:</b>\n\n"
+        
+        for i, tier in enumerate(FEE_STRUCTURE, 1):
+            fee_msg += f"{i}️⃣ <b>${tier['min']:.1f} - ${tier['max']:.1f}:</b> ${tier['fee']:.1f} fee\n"
+        
+        fee_msg += (
+            f"\n💡 <b>How it works:</b>\n"
+            f"• Service fee is automatically deducted when USDT is released\n"
+            f"• Buyer receives: Original Amount - Service Fee\n"
+            f"• Fees help maintain the escrow service\n\n"
+            f"📝 <b>Example:</b>\n"
+            f"• Trade $25 USDT → Pay $1.0 fee → Receive $24.0 USDT\n"
+            f"• Trade $15 USDT → Pay $0.8 fee → Receive $14.2 USDT"
+        )
+    
+    bot.reply_to(message, fee_msg, parse_mode='HTML')
+
+@bot.message_handler(commands=['feestats'])
+def admin_fee_stats(message):
+    """Admin command to view fee collection statistics"""
+    if not is_admin(message.from_user.username):
+        bot.reply_to(message, "🚫 <b>Admin Only Command</b>\n\nThis command is restricted to authorized admins.", parse_mode='HTML')
+        return
+    
+    try:
+        db = load_db()
+        total_fees_collected = 0
+        completed_deals = 0
+        total_volume = 0
+        
+        for deal_id, deal in db.items():
+            if deal.get("status") == "completed" and "transaction_fee" in deal:
+                fee = deal.get("transaction_fee", 0)
+                original_amount = deal.get("original_amount", deal.get("amount", 0))
+                
+                total_fees_collected += fee
+                completed_deals += 1
+                total_volume += original_amount
+        
+        avg_fee = total_fees_collected / completed_deals if completed_deals > 0 else 0
+        
+        stats_msg = (
+            f"📊 <b>Fee Collection Statistics</b>\n\n"
+            f"💰 <b>Total Fees Collected:</b> ${total_fees_collected:.2f} USDT\n"
+            f"📈 <b>Completed Deals:</b> {completed_deals}\n"
+            f"💵 <b>Total Trading Volume:</b> ${total_volume:.2f} USDT\n"
+            f"📊 <b>Average Fee per Deal:</b> ${avg_fee:.2f} USDT\n\n"
+            f"🔹 <b>Fee Status:</b> {'Enabled' if FEE_COLLECTION_ENABLED else 'Disabled'}\n"
+            f"🔹 <b>Fee Tiers:</b> {len(FEE_STRUCTURE)} tiers configured\n\n"
+            f"💡 <b>Current Escrow Balance:</b> {get_usdt_balance():.6f} USDT"
+        )
+        
+        bot.reply_to(message, stats_msg, parse_mode='HTML')
+        
+    except Exception as e:
+        bot.reply_to(message, f"❌ <b>Error generating fee stats:</b> {str(e)}", parse_mode='HTML')
 
 @bot.message_handler(commands=['mystatus'])
 def my_status(message):
