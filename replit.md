@@ -1,235 +1,49 @@
 # Escrow Bot Replit Project
 
 ## Overview
-
-This is a sophisticated Telegram marketplace bot that provides automated USDT trading with escrow protection. The bot features a complete order matching system where buyers and sellers can post orders, get automatically matched, and complete trades with dual confirmation security on the Polygon network.
+This project is a sophisticated Telegram marketplace bot designed for automated USDT trading with escrow protection on the Polygon network. Its primary purpose is to provide a secure and efficient platform for users to buy and sell USDT, featuring an automatic order matching system and dual confirmation security for transactions. The bot aims to simplify peer-to-peer cryptocurrency trading by automating the escrow process, enhancing trust and reducing friction in digital asset exchanges.
 
 ## User Preferences
-
 Preferred communication style: Simple, everyday language.
 
 ## System Architecture
-
 ### Core Architecture
-- **Backend**: Python-based application using Flask for web server functionality
-- **Bot Framework**: pyTelegramBotAPI library for Telegram integration
-- **Blockchain Integration**: Web3.py for Polygon network interaction
-- **Data Storage**: JSON file-based storage for simplicity (escrows.json, orders.json, wallets.json, blacklist.json)
-- **Trading Engine**: Automatic order matching and deal creation system
+- **Backend**: Python with Flask for web server.
+- **Bot Framework**: pyTelegramBotAPI for Telegram integration.
+- **Blockchain Integration**: Web3.py for Polygon network interaction.
+- **Data Storage**: JSON file-based for simplicity (`escrows.json`, `orders.json`, `wallets.json`, `blacklist.json`).
+- **Trading Engine**: Automatic order matching and deal creation.
 
 ### Key Design Decisions
-- **Single-file architecture**: All functionality concentrated in main.py for simplicity
-- **JSON storage**: Lightweight file-based storage instead of traditional database
-- **Polygon network**: Chosen for low transaction fees compared to Ethereum mainnet
-- **USDT focus**: Specifically designed for USDT transactions (most common stablecoin)
-- **pyTelegramBotAPI**: Switched from python-telegram-bot for better compatibility and stability
-- **Marketplace model**: Order-book style trading with automatic matching instead of manual deal creation
-- **Dual confirmation**: Both buyer and seller must confirm before automatic USDT release
+- **Single-file architecture**: All core functionality in `main.py`.
+- **JSON storage**: Lightweight file-based storage for persistence.
+- **Polygon Network**: Chosen for its low transaction fees, suitable for frequent USDT transactions.
+- **USDT Focus**: Specifically designed for USDT transactions as a widely adopted stablecoin.
+- **Marketplace Model**: Implements an order-book style trading system with automatic matching, rather than manual deal creation, to streamline transactions.
+- **Dual Confirmation**: Both buyer and seller must confirm actions for secure USDT release.
+- **UI/UX**: Utilizes Telegram's messaging capabilities with emoji and HTML formatting for clear, user-specific notifications and a professional user interface.
 
-## Key Components
-
-### 1. Telegram Bot Interface
-- Admin-controlled bot with specific authorized usernames
-- Group-based operations (specific GROUP_ID)
-- Command handlers for marketplace trading and escrow management
-- User wallet management system
-
-### 2. Blockchain Integration
-- Web3 connection to Polygon network via RPC
-- USDT contract interaction for balance checking and transfers
-- Wallet management with private key for escrow operations
-
-### 3. Trading & Escrow Management System
-- JSON-based order book (buy_orders, sell_orders)
-- Automatic order matching and deal creation
-- Dual confirmation system (/paid and /received)
-- Automatic USDT release when both parties confirm
-- Dispute handling with admin intervention
-- User wallet address management
-- Blacklist functionality for user management
-- Multi-threaded operation support
-
-### 4. Web Server Component
-- Flask server for health checks and uptime monitoring
-- Multiple monitoring endpoints for external services:
-  - `/` - Basic "Escrow bot running" message  
-  - `/health` - Comprehensive health check (Web3, balance, files)
-  - `/status` - Simple "OK" response for UptimeRobot
-
-## Recent Changes
-
-### August 4, 2025 - CRITICAL SECURITY FIX: Deal Workflow Logic & Payment Verification
-- **Fixed Fatal Workflow Vulnerability**: Corrected `/paid` command logic that allowed buyers to confirm payments before USDT was deposited
-- **Enhanced Blockchain Verification**: Replaced placeholder `verify_payment_sender` function with real blockchain verification using Transfer events
-- **Strict Deal Status Control**: Updated `/paid` command to only accept deals in `usdt_deposited` or `buyer_paid` status (removed dangerous `waiting_usdt_deposit`)
-- **Real Payment Verification**: Added comprehensive USDT Transfer event querying to verify payments come from authorized seller wallets
-- **Enhanced Security for Unverified Wallets**: Deals without seller wallet addresses now require admin verification before proceeding
-- **Comprehensive Error Handling**: Added detailed error reporting and admin alerts for failed payment verification
-- **Status**: ✅ Critical security vulnerability fixed - buyers can no longer bypass USDT deposit requirement
-
-### August 3, 2025 - Payment Forwarding Integration & C Wallet Solution
-- **Payment Forwarding API**: Integrated Crypto APIs service for automatic payment forwarding to escrow wallet
-- **Direct Payment Addresses**: Users can generate unique payment addresses that auto-forward to escrow with /directpay command
-- **Enhanced Deal Creation**: New deals automatically create forwarding addresses when API key is available
-- **Webhook System**: Added /webhook/payment-received endpoint for real-time payment notifications
-- **QR Code Generation**: Payment addresses include QR codes for easy mobile wallet scanning
-- **Fallback System**: Graceful fallback to standard escrow wallet when forwarding unavailable
-- **Status**: ✅ Complete payment forwarding system ready for C wallet-style direct payments
-
-### August 3, 2025 - /cancel Command & User Experience Enhancement
-- **New /cancel Command**: Added comprehensive cancellation feature allowing users to cancel their active orders and early-stage deals
-- **Smart Cancellation Logic**: Users can cancel buy/sell orders and deals that haven't progressed beyond USDT deposit stage
-- **Automatic Notifications**: Other party is automatically notified when deals are cancelled with clear reason and canceller information
-- **Rate Limited Security**: Cancel command includes rate limiting protection to prevent spam cancellations
-- **Updated Help System**: Both /help and /start commands now include the new /cancel functionality
-- **Status**: ✅ Full cancellation system operational, giving users complete control over their trading activity
-
-### August 3, 2025 - Critical Spam Fix & Enhanced Payment Detection
-- **Telegram Spam Resolution**: Fixed repeated deal expiration messages by implementing one-time notification system with expiry_notified flag
-- **Enhanced Payment Detection**: Improved payment monitoring with detailed sender information, transaction context, and verification status
-- **Professional Workflow Messages**: Enhanced notification system showing clear step-by-step instructions for both buyer and seller
-- **Advanced Payment Verification**: Enhanced verify_payment_sender function with real transaction details, block numbers, and comprehensive validation
-- **Silent Monitoring**: Fixed excessive balance check logging by implementing verbose parameter for admin-only detailed output
-- **Status**: ✅ All spam issues resolved, payment detection significantly enhanced with professional user experience
-
-### August 3, 2025 - Comprehensive Security Enhancement Suite
-- **Race Condition Prevention**: Implemented secure payment claiming with timeout locks to prevent multiple deals claiming same payment
-- **Advanced Rate Limiting**: Added multi-tier rate limiting system (5 commands/minute general, 3 orders/hour)
-- **Duplicate Order Prevention**: Prevents users from creating multiple identical buy/sell orders
-- **Payment Processing Lock**: Enhanced payment monitoring with RLock to ensure atomic operations
-- **Anti-Spam Infrastructure**: Comprehensive command tracking and automatic cleanup of old security data
-- **Enhanced Fraud Detection**: Strengthened wallet verification and payment sender authentication
-- **Security Data Persistence**: Added security_data.json for tracking user behavior patterns
-- **Command Cooldowns**: Implemented cooldown periods between expensive operations
-- **Status**: ✅ Complete security overhaul operational, protecting against all identified vulnerabilities
-
-### August 3, 2025 - Enhanced Deal Expiry Management
-- **Immediate Deal Deletion**: Updated `check_deal_expiry()` function to delete expired deals immediately instead of marking them as expired
-- **Automatic Cleanup**: Deals are now completely removed from the system after 15 minutes with no admin intervention needed
-- **Enhanced Notifications**: Updated expiry messages to indicate deals have been deleted, not just expired
-- **System Efficiency**: Reduces database bloat by removing old deals automatically
-- **Status**: ✅ Enhanced expiry management operational, expired deals deleted immediately
-
-### July 30, 2025 - Critical Security Enhancement: Payment Sender Verification
-- **Sender Verification System**: Added comprehensive system to verify USDT payments come from authorized seller wallets
-- **Enhanced Deal Creation**: Updated create_deal function to store seller wallet addresses for verification
-- **Fraud Prevention**: Automatic deal cancellation when payments come from unauthorized wallets  
-- **Admin Security Alerts**: Automatic notifications to admins when unauthorized payments are detected
-- **Verification Framework**: Built foundation for blockchain transaction verification (currently simplified)
-- **Data Security**: All deals now track both buyer and seller wallet addresses for complete audit trail
-- **Status**: ✅ Enhanced security system operational, protecting against payment fraud
-
-### July 30, 2025 - Enhanced Security and Trading Limits Update
-- **Deal Expiry**: Reduced from 24 hours to 15 minutes for faster deal resolution
-- **Trading Limits**: Updated to minimum 5 USDT and maximum 50 USDT per transaction
-- **Bot Behavior**: Modified to only respond to specific commands, ignoring unknown messages
-- **Implementation**: Updated all time calculations from hours to minutes throughout the system
-- **Result**: More focused, secure trading environment with tighter controls
-- **Status**: ✅ All changes operational, bot running with enhanced parameters
-
-### July 30, 2025 - Critical Indentation Error Fix
-- **Issue**: IndentationError in payment monitoring function preventing app startup
-- **Root Cause**: Code after `if deal["status"] == "waiting_usdt_deposit":` was incorrectly indented
-- **Solution**: Fixed proper indentation for all code blocks within the conditional statement
-- **Result**: App now starts successfully with all systems operational
-- **Status**: ✅ Bot running, Web3 connected, payment monitoring active
-
-### July 26, 2025 - Critical Bug Fix: MATIC Balance Issue Resolution
-- **Root Cause Identified**: Escrow wallet had 0 MATIC balance, preventing USDT withdrawals
-- **Error Symptom**: Users receiving "INTERNAL_ERROR: insufficient funds" when trying to withdraw
-- **Comprehensive Solution Implemented**:
-  - Added `get_matic_balance()` function to monitor gas fees
-  - Enhanced `release_usdt_to_buyer()` with pre-transaction MATIC balance validation
-  - Created `check_wallet_balances()` with automatic admin notifications for low MATIC
-  - Updated `/balance` command for admins to show both USDT and MATIC balances
-  - Added `/forcerelease DEAL_ID` command for manual intervention after MATIC funding
-  - Improved error messages with clear instructions for funding the escrow wallet
-- **Prevention Measures**: Automated alerts when MATIC balance drops below 0.01 MATIC
-- **Admin Tools**: Enhanced balance monitoring and force release capabilities
-
-### July 26, 2025 - Major Marketplace Trading System Implementation
-- **Complete system redesign**: Transformed from basic escrow to marketplace-style trading
-- **Order book system**: Added `/buy` and `/sell` commands for posting orders
-- **Automatic matching**: Bot instantly creates deals when buy/sell orders match amounts
-- **Wallet management**: Added `/mywallet` command for users to set USDT delivery addresses
-- **Dual confirmation system**: Both `/paid` and `/received` commands required for completion
-- **Automatic USDT release**: When both parties confirm, USDT auto-transfers to buyer's wallet
-- **Dispute handling**: Added `/notreceived` command to flag payment issues
-- **Admin override**: New `/release @user` command for dispute resolution
-- **Enhanced user experience**: Added `/orders`, `/mystatus` commands for tracking
-- **Database expansion**: Added orders.json and wallets.json for marketplace functionality
-- **Professional UI**: Maintained emoji and HTML formatting throughout new commands
-- **Comprehensive help**: Updated `/help` command with complete trading workflow guide
-- **Enhanced messaging**: Clear escrow wallet address delivery to sellers when deals match
-- **User-specific notifications**: Personalized messages for buyers and sellers with role-specific instructions
-
-## Data Flow
-
-1. **Order Placement**: Users post `/buy AMOUNT` or `/sell AMOUNT` orders
-2. **Automatic Matching**: Bot matches orders with same amount and creates deals
-3. **USDT Deposit**: Seller sends USDT to escrow wallet address
-4. **Fiat Transfer**: Buyer sends fiat payment to seller via bank transfer
-5. **Dual Confirmation**: Both parties confirm with `/paid` and `/received` commands
-6. **Automatic Release**: Bot automatically transfers USDT to buyer's wallet
-7. **Dispute Resolution**: Admin intervention with `/release` command if issues arise
+### Feature Specifications
+- **Telegram Bot Interface**: Admin-controlled with specific authorized users, group-based operations, and command handlers for trading, escrow, and user wallet management.
+- **Blockchain Integration**: Connects to Polygon RPC, interacts with USDT contract for balance checks and transfers, and manages private keys for escrow operations.
+- **Trading & Escrow Management**: Features JSON-based order books, automatic order matching, dual confirmation (`/paid`, `/received`), automatic USDT release, dispute handling with admin intervention, user wallet address management, and a blacklist function.
+- **Web Server Component**: Flask server for health checks (`/`, `/health`, `/status`) and uptime monitoring.
+- **Deal Workflow**: Comprehensive system for order placement, automatic matching, USDT deposit, fiat transfer, dual confirmation, automatic release, and dispute resolution.
+- **Security Features**: Includes admin username verification, private key environment variable protection, group-specific bot operation, blacklist functionality, race condition prevention, multi-tier rate limiting, duplicate order prevention, and enhanced payment verification for fraud detection.
 
 ## External Dependencies
-
 ### Required Python Packages
-- `web3`: Blockchain interaction
-- `python-telegram-bot`: Telegram bot functionality
-- `flask`: Web server for monitoring endpoints
+- `web3`: For blockchain interaction.
+- `pyTelegramBotAPI`: For Telegram bot functionality.
+- `flask`: For web server functionality.
 
 ### External Services
-- **Polygon RPC**: Blockchain network connection
-- **Telegram Bot API**: Bot communication platform
-- **USDT Contract**: ERC-20 token contract on Polygon
+- **Polygon RPC**: Connection to the Polygon blockchain network.
+- **Telegram Bot API**: Platform for bot communication.
+- **USDT Contract**: ERC-20 token contract on the Polygon network.
+- **Crypto APIs**: Integrated for automatic payment forwarding services.
 
 ### Network Dependencies
-- Polygon network connectivity
-- Telegram API access
-- Internet connection for RPC calls
-
-## Deployment Strategy
-
-### Environment Configuration
-- Environment variables for sensitive data (BOT_TOKEN, PRIVATE_KEY)
-- Hardcoded fallback values for development/testing
-- Port 8080 for Flask server (compatible with most hosting platforms)
-
-### File Structure
-```
-/
-├── main.py           # Main application file
-├── escrows.json      # Active deals/escrow data storage
-├── orders.json       # Buy/sell order book
-├── wallets.json      # User wallet addresses
-├── blacklist.json    # Blacklisted users
-└── attached_assets/  # Additional code snippets/backups
-```
-
-### Hosting Considerations
-- Designed for platforms like Replit, Heroku, or similar
-- Continuous uptime requirement for monitoring blockchain
-- Web endpoint for health checks and monitoring services
-
-### Security Features
-- Admin username verification
-- Private key environment variable protection
-- Group-specific bot operation
-- Blacklist functionality for user management
-
-## Technical Notes
-
-### Blockchain Configuration
-- **Network**: Polygon (MATIC)
-- **USDT Contract**: 0xc2132D05D31c914a87C6611C10748AeCB8fA48b6
-- **Decimals**: 6 (USDT specific)
-- **Middleware**: Geth PoA for Polygon compatibility
-
-### Bot Configuration
-- **Admin Users**: Indianarmy_1947, Threethirty330
-- **Target Group**: -1002830799357
-- **Escrow Wallet**: 0x5a2dD9bFe9cB39F6A1AD806747ce29718b1BfB70
-
-The system is designed for simplicity and reliability, focusing on core escrow functionality while maintaining security through admin controls and blockchain verification.
+- Consistent Polygon network connectivity.
+- Stable Telegram API access.
+- Reliable internet connection for all RPC calls.
