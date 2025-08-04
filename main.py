@@ -371,44 +371,66 @@ def get_matic_balance():
         return 0
 
 def verify_payment_sender(expected_amount, expected_sender_wallet, time_window=300):
-    """Enhanced verification with detailed transaction information and sender validation"""
+    """CRITICAL SECURITY: Real blockchain verification to prevent fraud"""
     print(f"🔍 Verifying payment: {expected_amount} USDT from {expected_sender_wallet}")
     
-    # Enhanced validation with detailed transaction tracking
-    if expected_sender_wallet and expected_sender_wallet != "Not set":
-        try:
-            # Get current block for transaction context
-            current_block = web3.eth.get_block('latest')['number']
-            
-            print(f"✅ Payment verification passed: {expected_amount} USDT from authorized wallet")
-            
-            # Enhanced transaction info with real wallet details
-            tx_info = {
-                'tx_hash': f"0x{''.join(['a1b2c3d4e5f6789' for _ in range(3)])}",
-                'from': expected_sender_wallet,
-                'to': ESCROW_WALLET,
-                'amount': expected_amount,
-                'timestamp': time.time(),
-                'block_number': current_block,
-                'verified': True,
-                'verification_method': 'wallet_authorization'
-            }
-            
-            return True, tx_info
-            
-        except Exception as e:
-            print(f"⚠️ Error in payment verification: {e}")
-            # Fallback with basic info
-            return True, {
-                'tx_hash': 'verification_fallback',
-                'from': expected_sender_wallet,
-                'amount': expected_amount,
-                'timestamp': time.time(),
-                'verified': True
-            }
+    if not expected_sender_wallet or expected_sender_wallet == "Not set":
+        print(f"⚠️ Cannot verify: Seller wallet not properly set")
+        return False, None
     
-    print(f"⚠️ Seller wallet not properly set for verification")
-    return False, None
+    try:
+        # Get recent USDT Transfer events to our escrow wallet
+        current_block = web3.eth.get_block('latest')['number']
+        from_block = current_block - 100  # Check last 100 blocks (~5 minutes on Polygon)
+        
+        # Query USDT Transfer events to escrow wallet
+        usdt_contract = web3.eth.contract(address=web3.to_checksum_address(USDT_CONTRACT), abi=abi)
+        transfer_filter = usdt_contract.events.Transfer.create_filter(
+            fromBlock=from_block,
+            toBlock='latest',
+            argument_filters={'to': ESCROW_WALLET}
+        )
+        
+        transfers = transfer_filter.get_all_entries()
+        print(f"🔍 Found {len(transfers)} recent transfer(s) to escrow wallet")
+        
+        # Look for matching transfer from expected sender with expected amount
+        expected_amount_wei = int(expected_amount * (10 ** USDT_DECIMALS))
+        
+        for transfer in transfers:
+            sender = transfer['args']['from']
+            amount_wei = transfer['args']['value']
+            amount_usdt = amount_wei / (10 ** USDT_DECIMALS)
+            tx_hash = transfer['transactionHash'].hex()
+            
+            print(f"📋 Transfer found: {amount_usdt} USDT from {sender}")
+            
+            # Check if sender matches and amount matches (with small tolerance)
+            if (sender.lower() == expected_sender_wallet.lower() and 
+                abs(amount_usdt - expected_amount) < 0.01):
+                
+                print(f"✅ VERIFIED: Payment of {expected_amount} USDT from authorized sender {expected_sender_wallet}")
+                
+                tx_info = {
+                    'tx_hash': tx_hash,
+                    'from': sender,
+                    'to': ESCROW_WALLET,
+                    'amount': amount_usdt,
+                    'timestamp': time.time(),
+                    'block_number': transfer['blockNumber'],
+                    'verified': True,
+                    'verification_method': 'blockchain_verification'
+                }
+                
+                return True, tx_info
+        
+        print(f"❌ VERIFICATION FAILED: No matching transfer found from {expected_sender_wallet} for {expected_amount} USDT")
+        return False, None
+        
+    except Exception as e:
+        print(f"❌ CRITICAL ERROR in payment verification: {e}")
+        # Security: If we can't verify, we DENY the payment
+        return False, None
 
 def validate_wallet_address(address):
     """Validate Ethereum wallet address format"""
@@ -1098,7 +1120,7 @@ def confirm_paid(message):
     deal_id = None
     
     for tx_id, tx in db.items():
-        if tx["buyer"] == f"@{username}" and tx["status"] in ["waiting_usdt_deposit", "usdt_deposited"]:
+        if tx["buyer"] == f"@{username}" and tx["status"] in ["usdt_deposited", "buyer_paid"]:
             user_deal = tx
             deal_id = tx_id
             break
@@ -2451,51 +2473,80 @@ def monitor_payments():
                                 # Initialize tx_info
                                 tx_info = None
                                 
-                                # Verify payment sender if seller has set wallet
+                                # CRITICAL SECURITY: Always verify payment sender if seller has set wallet
                                 if seller_wallet != "Not set":
                                     payment_verified, tx_info = verify_payment_sender(expected_amount, seller_wallet)
                                     
                                     if not payment_verified:
-                                        print(f"❌ Payment verification failed for deal {deal_id}")
+                                        print(f"❌ CRITICAL: Payment verification failed for deal {deal_id}")
                                         
-                                        # Cancel deal due to wrong sender
-                                        db[deal_id]["status"] = "cancelled_wrong_sender"
+                                        # Cancel deal due to wrong sender or verification failure
+                                        db[deal_id]["status"] = "cancelled_verification_failed"
                                         db[deal_id]["received_amount"] = diff
+                                        db[deal_id]["failure_reason"] = "Payment sender verification failed"
                                         save_db(db)
                                         
                                         # Notify about cancellation
                                         bot.send_message(
                                             chat_id=GROUP_ID,
-                                            text=f"❌ <b>DEAL CANCELLED - WRONG SENDER</b>\n\n"
+                                            text=f"❌ <b>DEAL CANCELLED - VERIFICATION FAILED</b>\n\n"
                                                  f"🆔 Deal ID: <code>{deal_id}</code>\n"
                                                  f"💵 Amount: {expected_amount} USDT received\n"
-                                                 f"⚠️ Payment came from unauthorized wallet\n"
-                                                 f"🔒 Expected from: {deal['seller']} ({seller_wallet[:10]}...)\n"
-                                                 f"🚫 Received from: {tx_info['from'][:10] if tx_info else 'Unknown'}...\n\n"
+                                                 f"⚠️ Payment could not be verified from authorized sender\n"
+                                                 f"🔒 Expected from: {deal['seller']} ({seller_wallet[:10]}...)\n\n"
                                                  f"🛠️ <b>SECURITY ALERT:</b>\n"
-                                                 f"📞 Only seller can send USDT for this deal\n"
-                                                 f"🔔 Admins will process the refund manually",
+                                                 f"📞 Only verified seller payments are accepted\n"
+                                                 f"🔔 Admins will process the refund manually\n\n"
+                                                 f"🚨 <b>This prevents payment fraud and unauthorized deposits</b>",
                                             parse_mode='HTML'
                                         )
                                         
-                                        # Alert admins
+                                        # Alert admins with detailed info
                                         admin_msg = (
-                                            f"🚨 <b>SECURITY ALERT: UNAUTHORIZED PAYMENT</b>\n\n"
+                                            f"🚨 <b>CRITICAL SECURITY ALERT: PAYMENT VERIFICATION FAILED</b>\n\n"
                                             f"🆔 Deal ID: <code>{deal_id}</code>\n"
                                             f"💵 Amount: {expected_amount} USDT\n"
                                             f"👥 Expected from: {deal['seller']} ({seller_wallet})\n"
-                                            f"🚫 Received from: {tx_info['from'] if tx_info else 'Unknown'}\n"
-                                            f"🔗 TX: {tx_info['tx_hash'][:20] if tx_info else 'N/A'}...\n\n"
-                                            f"🛠️ Refund required with /emergency {deal_id} WALLET_ADDRESS"
+                                            f"❌ Verification failed - payment rejected\n\n"
+                                            f"🔍 Possible causes:\n"
+                                            f"• Payment from unauthorized wallet\n"
+                                            f"• Network/blockchain query error\n"
+                                            f"• Amount mismatch\n\n"
+                                            f"🛠️ Manual refund required with /emergency {deal_id} WALLET_ADDRESS"
                                         )
                                         
                                         for admin in ADMIN_USERNAMES:
                                             try:
                                                 bot.send_message(chat_id=GROUP_ID, text=admin_msg, parse_mode='HTML')
                                                 break
-                                            except:
+                                            except Exception as e:
+                                                print(f"Failed to notify admin: {e}")
                                                 continue
                                         continue
+                                else:
+                                    # CRITICAL SECURITY ENHANCEMENT: If seller wallet not set, require admin verification
+                                    print(f"⚠️ SECURITY ALERT: Deal {deal_id} has no seller wallet set - requiring admin verification")
+                                    
+                                    db[deal_id]["status"] = "pending_admin_verification"
+                                    db[deal_id]["received_amount"] = diff
+                                    db[deal_id]["verification_required_reason"] = "No seller wallet for verification"
+                                    save_db(db)
+                                    
+                                    # Notify that admin verification is required
+                                    bot.send_message(
+                                        chat_id=GROUP_ID,
+                                        text=f"⚠️ <b>PAYMENT REQUIRES ADMIN VERIFICATION</b>\n\n"
+                                             f"🆔 Deal ID: <code>{deal_id}</code>\n"
+                                             f"💵 Amount: {expected_amount} USDT received\n"
+                                             f"❌ Seller {deal['seller']} has no wallet address set\n"
+                                             f"🔒 Cannot verify payment sender automatically\n\n"
+                                             f"🛠️ <b>ADMIN ACTION REQUIRED:</b>\n"
+                                             f"📞 Manual verification and approval needed\n"
+                                             f"🔔 Use /verify {deal_id} to approve after checking blockchain\n\n"
+                                             f"🚨 <b>Security:</b> Prevents unauthorized deposits without verification",
+                                        parse_mode='HTML'
+                                    )
+                                    continue
                                 
                                 # Payment verified or seller wallet not set - proceed
                                 print(f"✅ Payment verified for deal {deal_id}")

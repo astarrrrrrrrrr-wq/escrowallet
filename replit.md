@@ -58,6 +58,15 @@ Preferred communication style: Simple, everyday language.
 
 ## Recent Changes
 
+### August 4, 2025 - CRITICAL SECURITY FIX: Deal Workflow Logic & Payment Verification
+- **Fixed Fatal Workflow Vulnerability**: Corrected `/paid` command logic that allowed buyers to confirm payments before USDT was deposited
+- **Enhanced Blockchain Verification**: Replaced placeholder `verify_payment_sender` function with real blockchain verification using Transfer events
+- **Strict Deal Status Control**: Updated `/paid` command to only accept deals in `usdt_deposited` or `buyer_paid` status (removed dangerous `waiting_usdt_deposit`)
+- **Real Payment Verification**: Added comprehensive USDT Transfer event querying to verify payments come from authorized seller wallets
+- **Enhanced Security for Unverified Wallets**: Deals without seller wallet addresses now require admin verification before proceeding
+- **Comprehensive Error Handling**: Added detailed error reporting and admin alerts for failed payment verification
+- **Status**: ✅ Critical security vulnerability fixed - buyers can no longer bypass USDT deposit requirement
+
 ### August 3, 2025 - Payment Forwarding Integration & C Wallet Solution
 - **Payment Forwarding API**: Integrated Crypto APIs service for automatic payment forwarding to escrow wallet
 - **Direct Payment Addresses**: Users can generate unique payment addresses that auto-forward to escrow with /directpay command
